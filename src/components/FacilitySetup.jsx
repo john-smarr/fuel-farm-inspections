@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { getFacilities, saveFacility, deleteFacility, getActiveFacilityId, setActiveFacilityId, generateId, getSettings, saveSettings } from '../data/storage'
+import { loadDemoData, clearDemoData } from '../data/seed'
 
 function exportAllData() {
   const data = {}
@@ -384,6 +385,41 @@ export default function FacilitySetup({ onFacilityChange }) {
                 : importStatus.split(':').slice(1).join(':')}
             </p>
           )}
+        </div>
+
+        {/* Demo data */}
+        <div className="mt-6 pt-4 border-t border-gray-700 space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-300 mb-1">Demo Data</h3>
+            <p className="text-xs text-gray-500 mb-3">
+              Load a sample facility with inspections for this month to explore the app.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                const { facilityName, dailyCount } = loadDemoData()
+                refresh()
+                if (onFacilityChange) onFacilityChange()
+                alert(`Loaded demo data: ${dailyCount} daily inspections for ${facilityName}`)
+              }}
+              className="btn-secondary flex-1 text-sm"
+            >
+              Load Demo Data
+            </button>
+            <button
+              onClick={() => {
+                if (window.confirm('Clear all app data? This cannot be undone.')) {
+                  clearDemoData()
+                  refresh()
+                  if (onFacilityChange) onFacilityChange()
+                }
+              }}
+              className="flex-1 text-sm py-2 px-4 rounded-lg border border-red-800 text-red-400 hover:bg-red-900/20 hover:border-red-600 transition-colors"
+            >
+              Clear All Data
+            </button>
+          </div>
         </div>
 
         {/* App info */}
