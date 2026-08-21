@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="80" fill="#1f2937"/>
+  <!-- Fuel droplet shape -->
+  <path d="M256 80 C256 80 160 200 160 300 C160 358 202 400 256 400 C310 400 352 358 352 300 C352 200 256 80 256 80Z" fill="#F5A623"/>
+  <!-- P66 text -->
+  <text x="256" y="340" font-family="Arial Black, sans-serif" font-size="72" font-weight="900" fill="#1f2937" text-anchor="middle">P66</text>
+  <!-- Shine effect -->
+  <ellipse cx="220" cy="220" rx="20" ry="30" fill="rgba(255,255,255,0.25)" transform="rotate(-20 220 220)"/>
+</svg>
