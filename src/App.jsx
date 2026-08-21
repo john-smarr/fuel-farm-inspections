@@ -4,6 +4,7 @@ import CalendarGrid from './components/CalendarGrid'
 import MonthlyInspection from './components/MonthlyInspection'
 import FacilitySetup from './components/FacilitySetup'
 import ReferenceLegend from './components/ReferenceLegend'
+import HelpScreen from './components/HelpScreen'
 import { getFacilities, getActiveFacilityId } from './data/storage'
 
 function getActiveFacility() {
@@ -17,6 +18,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('daily')
   const [facility, setFacility] = useState(() => getActiveFacility())
   const [showLegend, setShowLegend] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
 
   const handleFacilityChange = () => {
     setFacility(getActiveFacility())
@@ -43,6 +45,17 @@ export default function App() {
               <p className="text-xs text-gray-500 leading-tight">Phillips 66 Aviation</p>
             </div>
           </div>
+          {/* Help button */}
+          <button
+            onClick={() => setShowHelp(true)}
+            className="p-1.5 text-gray-500 hover:text-amber-400 transition-colors"
+            aria-label="Help"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+
           {/* Active facility badge */}
           <div className="text-right min-w-0">
             {facility ? (
@@ -87,6 +100,9 @@ export default function App() {
           }} />
         )}
       </main>
+
+      {/* Help screen */}
+      {showHelp && <HelpScreen onClose={() => setShowHelp(false)} />}
 
       {/* Persistent Reference Legend FAB — visible on daily/monthly tabs */}
       {(activeTab === 'daily' || activeTab === 'monthly') && (
