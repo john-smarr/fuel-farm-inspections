@@ -3,6 +3,7 @@ import Navigation from './components/Navigation'
 import CalendarGrid from './components/CalendarGrid'
 import MonthlyInspection from './components/MonthlyInspection'
 import FacilitySetup from './components/FacilitySetup'
+import AssetSetup from './components/AssetSetup'
 import ReferenceLegend from './components/ReferenceLegend'
 import HelpScreen from './components/HelpScreen'
 import { getFacilities, getActiveFacilityId } from './data/storage'
@@ -19,6 +20,7 @@ export default function App() {
   const [facility, setFacility] = useState(() => getActiveFacility())
   const [showLegend, setShowLegend] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
+  const [assetSetupFacility, setAssetSetupFacility] = useState(null)
 
   const handleFacilityChange = () => {
     setFacility(getActiveFacility())
@@ -36,13 +38,8 @@ export default function App() {
       <header className="bg-gray-800 border-b border-gray-700 px-4 py-3 flex-shrink-0 safe-top no-print">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            {/* P66 Logo mark */}
-            <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center flex-shrink-0">
-              <span className="text-gray-900 font-black text-xs leading-none">P66</span>
-            </div>
             <div>
               <h1 className="text-sm font-bold text-white leading-tight">Fuel Farm Inspector</h1>
-              <p className="text-xs text-gray-500 leading-tight">Phillips 66 Aviation</p>
             </div>
           </div>
           {/* Help button */}
@@ -95,14 +92,27 @@ export default function App() {
 
         {/* Tab: Settings */}
         {activeTab === 'settings' && (
-          <FacilitySetup onFacilityChange={() => {
-            handleFacilityChange()
-          }} />
+          <FacilitySetup
+            onFacilityChange={handleFacilityChange}
+            onOpenAssets={(fac) => {
+              const fresh = getFacilities().find(f => f.id === fac.id) || fac
+              setAssetSetupFacility(fresh)
+            }}
+          />
         )}
       </main>
 
       {/* Help screen */}
       {showHelp && <HelpScreen onClose={() => setShowHelp(false)} />}
+
+      {/* Asset setup */}
+      {assetSetupFacility && (
+        <AssetSetup
+          facility={assetSetupFacility}
+          onClose={() => setAssetSetupFacility(null)}
+          onUpdate={handleFacilityChange}
+        />
+      )}
 
       {/* Persistent Reference Legend FAB — visible on daily/monthly tabs */}
       {(activeTab === 'daily' || activeTab === 'monthly') && (

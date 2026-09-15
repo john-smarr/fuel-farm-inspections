@@ -17,13 +17,14 @@ function getTodayString() {
   return toDateString(now.getFullYear(), now.getMonth(), now.getDate())
 }
 
-function getInspectionStatus(inspection) {
-  if (!inspection) return 'none'
-  const checks = inspection.checks || {}
-  const values = Object.values(checks)
-  if (values.length === 0) return 'empty'
-  if (values.every(Boolean)) return 'pass'
-  return 'fail'
+// inspectionList is an array of inspections (one per asset) for a given date
+function getInspectionStatus(inspectionList) {
+  if (!inspectionList || inspectionList.length === 0) return 'none'
+  const anyFail = inspectionList.some(insp =>
+    Object.values(insp.checks || {}).some(v => !v)
+  )
+  if (anyFail) return 'fail'
+  return 'pass'
 }
 
 export default function CalendarGrid({ facilityId, facility }) {
@@ -104,8 +105,8 @@ export default function CalendarGrid({ facilityId, facility }) {
   }
 
   // Count stats
-  const monthStats = Object.values(inspections).reduce((acc, insp) => {
-    const status = getInspectionStatus(insp)
+  const monthStats = Object.values(inspections).reduce((acc, inspList) => {
+    const status = getInspectionStatus(inspList)
     acc[status] = (acc[status] || 0) + 1
     return acc
   }, {})
@@ -247,24 +248,25 @@ export default function CalendarGrid({ facilityId, facility }) {
           {/* Quick-entry shortcut for today */}
           {(() => {
             const todayInView = viewYear === today.getFullYear() && viewMonth === today.getMonth()
-            const todayEntry = inspections[todayStr]
+            const todayEntries = inspections[todayStr] || []
+            const hasTodayEntry = todayEntries.length > 0
             if (!todayInView) return null
             return (
               <div className="mt-5 pt-4 border-t border-gray-800">
                 <button
                   onClick={() => setSelectedDate(todayStr)}
                   className={`w-full py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
-                    todayEntry
+                    hasTodayEntry
                       ? 'bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700'
                       : 'bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-gray-900'
                   }`}
                 >
-                  {todayEntry ? (
+                  {hasTodayEntry ? (
                     <>
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
-                      Edit Today's Entry
+                      Today's Entry ({todayEntries.length})
                     </>
                   ) : (
                     <>

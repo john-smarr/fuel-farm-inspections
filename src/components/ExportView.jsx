@@ -5,9 +5,17 @@ function isCapacitor() {
   return typeof window !== 'undefined' && !!window.Capacitor
 }
 
+function formatTimestamp(iso) {
+  if (!iso) return null
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  })
+}
+
 // ─── Daily Export ────────────────────────────────────────────────────────────
 
-export function DailyExportView({ inspection, facility, onClose }) {
+export function DailyExportView({ inspection, facility, asset, onClose }) {
   const handlePrint = () => {
     if (!isCapacitor()) {
       window.print()
@@ -40,15 +48,15 @@ export function DailyExportView({ inspection, facility, onClose }) {
       <div className="p-4 max-w-2xl mx-auto pb-8">
         <div className="bg-white text-black rounded-xl overflow-hidden shadow-2xl">
           {/* Header */}
-          <div className="bg-amber-500 px-6 py-4">
+          <div className="bg-gray-800 px-6 py-4">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-xl font-black text-gray-900">PHILLIPS 66</h1>
-                <p className="text-sm font-semibold text-gray-800">AVIATION FUEL FARM</p>
+                <h1 className="text-xl font-black text-white">FUEL FARM INSPECTION</h1>
+                <p className="text-sm font-semibold text-gray-300">Daily Checklist</p>
               </div>
               <div className="text-right">
-                <p className="text-xs font-semibold text-gray-800">DAILY INSPECTION</p>
-                <p className="text-sm font-bold text-gray-900">{inspection.date}</p>
+                <p className="text-xs font-semibold text-gray-400">DAILY INSPECTION</p>
+                <p className="text-sm font-bold text-white">{inspection.date}</p>
               </div>
             </div>
           </div>
@@ -64,6 +72,12 @@ export function DailyExportView({ inspection, facility, onClose }) {
                 <span className="text-gray-500 text-xs uppercase font-semibold">Facility ID</span>
                 <p className="font-semibold font-mono text-gray-900">{facility?.facilityId || '—'}</p>
               </div>
+              {asset && (
+                <div>
+                  <span className="text-gray-500 text-xs uppercase font-semibold">Asset</span>
+                  <p className="font-semibold text-gray-900">{asset.name}</p>
+                </div>
+              )}
               <div>
                 <span className="text-gray-500 text-xs uppercase font-semibold">Manager / Trainer</span>
                 <p className="font-semibold text-gray-900">{inspection.managerTrainer || '—'}</p>
@@ -72,6 +86,12 @@ export function DailyExportView({ inspection, facility, onClose }) {
                 <span className="text-gray-500 text-xs uppercase font-semibold">Signature</span>
                 <p className="font-semibold text-gray-900">{inspection.signature || '—'}</p>
               </div>
+              {inspection.updatedAt && (
+                <div>
+                  <span className="text-gray-500 text-xs uppercase font-semibold">Submitted</span>
+                  <p className="font-semibold text-gray-900">{formatTimestamp(inspection.updatedAt)}</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -108,30 +128,45 @@ export function DailyExportView({ inspection, facility, onClose }) {
           </div>
 
           {/* Sump Codes & DP */}
-          <div className="px-6 py-3 bg-gray-50 border-t border-gray-200">
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Readings</h3>
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div>
-                <span className="text-gray-500 text-xs uppercase font-semibold block mb-1">Tank Sump</span>
-                <span className="text-xl font-bold font-mono text-gray-900">
-                  {inspection.tankSump?.solidsCode || '?'}-{inspection.tankSump?.waterCode || '?'}
-                </span>
+          {(() => {
+            const tankSumps = inspection.tankSumps?.length > 0
+              ? inspection.tankSumps
+              : inspection.tankSump
+                ? [inspection.tankSump]
+                : []
+            return (
+              <div className="px-6 py-3 bg-gray-50 border-t border-gray-200">
+                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Readings</h3>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  {tankSumps.map((sump, idx) => (
+                    <div key={idx}>
+                      <span className="text-gray-500 text-xs uppercase font-semibold block mb-1">
+                        {tankSumps.length === 1 ? 'Tank Sump' : `Tank Sump ${idx + 1}`}
+                      </span>
+                      <span className="text-xl font-bold font-mono text-gray-900">
+                        {sump.solidsCode || '?'}-{sump.waterCode || '?'}
+                      </span>
+                    </div>
+                  ))}
+                  <div>
+                    <span className="text-gray-500 text-xs uppercase font-semibold block mb-1">Filter Vessel Sump</span>
+                    <span className="text-xl font-bold font-mono text-gray-900">
+                      {inspection.filterVesselSump?.solidsCode || '?'}-{inspection.filterVesselSump?.waterCode || '?'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 text-xs uppercase font-semibold block mb-1">DP Pressure</span>
+                    <span className="text-xl font-bold font-mono text-gray-900">
+                      {inspection.dpPressure != null && inspection.dpPressure !== '' ? inspection.dpPressure : '—'}
+                      {inspection.dpPressure != null && inspection.dpPressure !== '' && (
+                        <span className="text-sm font-normal ml-1">psi</span>
+                      )}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <span className="text-gray-500 text-xs uppercase font-semibold block mb-1">Filter Vessel Sump</span>
-                <span className="text-xl font-bold font-mono text-gray-900">
-                  {inspection.filterVesselSump?.solidsCode || '?'}-{inspection.filterVesselSump?.waterCode || '?'}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 text-xs uppercase font-semibold block mb-1">DP Pressure</span>
-                <span className="text-xl font-bold font-mono text-gray-900">
-                  {inspection.dpPressure != null && inspection.dpPressure !== '' ? inspection.dpPressure : '—'}
-                  {inspection.dpPressure != null && inspection.dpPressure !== '' && <span className="text-sm font-normal ml-1">psi</span>}
-                </span>
-              </div>
-            </div>
-          </div>
+            )
+          })()}
 
           {/* Comments */}
           {inspection.comment && (
@@ -142,8 +177,8 @@ export function DailyExportView({ inspection, facility, onClose }) {
           )}
 
           {/* Footer */}
-          <div className="px-6 py-3 bg-gray-800 text-gray-400 text-xs">
-            <p>Phillips 66 Aviation Fuel Quality Program · Confidential</p>
+          <div className="px-6 py-3 bg-gray-100 border-t border-gray-200 text-gray-500 text-xs">
+            <p>Fuel Farm Inspector · Daily Inspection Report</p>
           </div>
         </div>
       </div>
@@ -153,7 +188,7 @@ export function DailyExportView({ inspection, facility, onClose }) {
 
 // ─── Monthly Export ──────────────────────────────────────────────────────────
 
-export function MonthlyExportView({ inspection, facility, onClose }) {
+export function MonthlyExportView({ inspection, facility, asset, onClose }) {
   const handlePrint = () => {
     if (!isCapacitor()) {
       window.print()
@@ -196,15 +231,15 @@ export function MonthlyExportView({ inspection, facility, onClose }) {
       <div className="p-4 max-w-3xl mx-auto pb-8">
         <div className="bg-white text-black rounded-xl overflow-hidden shadow-2xl">
           {/* Header */}
-          <div className="bg-amber-500 px-6 py-4">
+          <div className="bg-gray-800 px-6 py-4">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-xl font-black text-gray-900">PHILLIPS 66</h1>
-                <p className="text-sm font-semibold text-gray-800">AVIATION FUEL FARM</p>
+                <h1 className="text-xl font-black text-white">FUEL FARM INSPECTION</h1>
+                <p className="text-sm font-semibold text-gray-300">Monthly Checklist</p>
               </div>
               <div className="text-right">
-                <p className="text-xs font-semibold text-gray-800">MONTHLY INSPECTION</p>
-                <p className="text-sm font-bold text-gray-900">{inspection.yearMonth}</p>
+                <p className="text-xs font-semibold text-gray-400">MONTHLY INSPECTION</p>
+                <p className="text-sm font-bold text-white">{inspection.yearMonth}</p>
               </div>
             </div>
           </div>
@@ -220,6 +255,18 @@ export function MonthlyExportView({ inspection, facility, onClose }) {
                 <span className="text-gray-500 text-xs uppercase font-semibold">Facility ID</span>
                 <p className="font-semibold font-mono text-gray-900">{facility?.facilityId || '—'}</p>
               </div>
+              {asset && (
+                <div>
+                  <span className="text-gray-500 text-xs uppercase font-semibold">Asset</span>
+                  <p className="font-semibold text-gray-900">{asset.name}</p>
+                </div>
+              )}
+              {inspection.updatedAt && (
+                <div>
+                  <span className="text-gray-500 text-xs uppercase font-semibold">Submitted</span>
+                  <p className="font-semibold text-gray-900">{formatTimestamp(inspection.updatedAt)}</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -281,8 +328,8 @@ export function MonthlyExportView({ inspection, facility, onClose }) {
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-3 bg-gray-800 text-gray-400 text-xs">
-            <p>Phillips 66 Aviation Fuel Quality Program · Confidential</p>
+          <div className="px-6 py-3 bg-gray-100 border-t border-gray-200 text-gray-500 text-xs">
+            <p>Fuel Farm Inspector · Monthly Inspection Report</p>
           </div>
         </div>
       </div>

@@ -6,7 +6,7 @@ function exportAllData() {
   const data = {}
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i)
-    if (key && key.startsWith('p66_')) {
+    if (key && key.startsWith('ffi_')) {
       try { data[key] = JSON.parse(localStorage.getItem(key)) }
       catch { data[key] = localStorage.getItem(key) }
     }
@@ -16,7 +16,7 @@ function exportAllData() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `p66-inspection-backup-${new Date().toISOString().slice(0, 10)}.json`
+  a.download = `fuel-farm-backup-${new Date().toISOString().slice(0, 10)}.json`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -28,7 +28,7 @@ function importAllData(file, onDone) {
       const data = JSON.parse(e.target.result)
       let count = 0
       Object.entries(data).forEach(([key, value]) => {
-        if (key.startsWith('p66_')) {
+        if (key.startsWith('ffi_')) {
           localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value))
           count++
         }
@@ -41,7 +41,7 @@ function importAllData(file, onDone) {
   reader.readAsText(file)
 }
 
-export default function FacilitySetup({ onFacilityChange }) {
+export default function FacilitySetup({ onFacilityChange, onOpenAssets }) {
   const [facilities, setFacilities] = useState(() => getFacilities())
   const [activeFacilityId, setActive] = useState(() => getActiveFacilityId())
   const [showAddForm, setShowAddForm] = useState(false)
@@ -49,7 +49,7 @@ export default function FacilitySetup({ onFacilityChange }) {
   const [nameInput, setNameInput] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
   const [error, setError] = useState('')
-  const [importStatus, setImportStatus] = useState(null) // null | 'success:N' | 'error:msg'
+  const [importStatus, setImportStatus] = useState(null)
   const [emailRecipients, setEmailRecipients] = useState(() => getSettings().emailRecipients || [])
   const [newEmail, setNewEmail] = useState('')
   const [emailError, setEmailError] = useState('')
@@ -69,9 +69,8 @@ export default function FacilitySetup({ onFacilityChange }) {
       setError('A facility with that ID already exists')
       return
     }
-    const newFacility = { id: generateId(), facilityId: fid, name }
+    const newFacility = { id: generateId(), facilityId: fid, name, assets: [] }
     saveFacility(newFacility)
-    // Auto-select if first facility
     if (facilities.length === 0) {
       setActiveFacilityId(newFacility.id)
     }
@@ -99,7 +98,6 @@ export default function FacilitySetup({ onFacilityChange }) {
     setEmailError('')
     const email = newEmail.trim().toLowerCase()
     if (!email) { setEmailError('Enter an email address'); return }
-    // Basic email validation
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setEmailError('Enter a valid email address')
       return
@@ -193,6 +191,7 @@ export default function FacilitySetup({ onFacilityChange }) {
             {facilities.map(facility => {
               const isActive = facility.id === activeFacilityId
               const confirmingDelete = confirmDeleteId === facility.id
+              const assetCount = (facility.assets || []).length
               return (
                 <div
                   key={facility.id}
@@ -221,51 +220,71 @@ export default function FacilitySetup({ onFacilityChange }) {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-3">
-                      {/* Select button */}
-                      <button
-                        onClick={() => handleSelect(facility.id)}
-                        className="flex-1 text-left"
-                      >
-                        <div className="flex items-center gap-2">
-                          {isActive && (
-                            <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
-                          )}
-                          <div>
-                            <div className={`font-semibold ${isActive ? 'text-amber-400' : 'text-white'}`}>
-                              {facility.name}
-                            </div>
-                            <div className="text-xs text-gray-500 font-mono mt-0.5">
-                              {facility.facilityId}
+                    <>
+                      <div className="flex items-center gap-3">
+                        {/* Select button */}
+                        <button
+                          onClick={() => handleSelect(facility.id)}
+                          className="flex-1 text-left"
+                        >
+                          <div className="flex items-center gap-2">
+                            {isActive && (
+                              <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+                            )}
+                            <div>
+                              <div className={`font-semibold ${isActive ? 'text-amber-400' : 'text-white'}`}>
+                                {facility.name}
+                              </div>
+                              <div className="text-xs text-gray-500 font-mono mt-0.5 flex items-center gap-2">
+                                <span>{facility.facilityId}</span>
+                                {assetCount > 0 && (
+                                  <span className="text-gray-600">{assetCount} asset{assetCount !== 1 ? 's' : ''}</span>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        {isActive && (
-                          <span className="text-xs text-amber-500 mt-1 block">Active Facility</span>
-                        )}
-                      </button>
+                          {isActive && (
+                            <span className="text-xs text-amber-500 mt-1 block">Active Facility</span>
+                          )}
+                        </button>
 
-                      {/* Actions */}
-                      <div className="flex items-center gap-1">
-                        {!isActive && (
+                        {/* Actions */}
+                        <div className="flex items-center gap-1">
+                          {!isActive && (
+                            <button
+                              onClick={() => handleSelect(facility.id)}
+                              className="text-xs text-gray-400 hover:text-amber-400 px-2 py-1 rounded border border-gray-600 hover:border-amber-500 transition-colors"
+                            >
+                              Select
+                            </button>
+                          )}
                           <button
-                            onClick={() => handleSelect(facility.id)}
-                            className="text-xs text-gray-400 hover:text-amber-400 px-2 py-1 rounded border border-gray-600 hover:border-amber-500 transition-colors"
+                            onClick={() => setConfirmDeleteId(facility.id)}
+                            className="p-1.5 text-gray-500 hover:text-red-400 transition-colors"
+                            aria-label="Delete facility"
                           >
-                            Select
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
                           </button>
-                        )}
+                        </div>
+                      </div>
+
+                      {/* Assets summary + link to setup */}
+                      <div className="mt-3 pt-3 border-t border-gray-700/60 flex items-center justify-between">
+                        <span className="text-xs text-gray-600">
+                          {assetCount > 0
+                            ? `${assetCount} asset${assetCount !== 1 ? 's' : ''} configured`
+                            : 'No assets configured'}
+                        </span>
                         <button
-                          onClick={() => setConfirmDeleteId(facility.id)}
-                          className="p-1.5 text-gray-500 hover:text-red-400 transition-colors"
-                          aria-label="Delete facility"
+                          onClick={() => onOpenAssets?.(facility)}
+                          className="text-xs text-gray-400 hover:text-amber-400 border border-gray-600 hover:border-amber-500 px-2.5 py-1 rounded-lg transition-colors"
                         >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
+                          Manage Assets →
                         </button>
                       </div>
-                    </div>
+                    </>
                   )}
                 </div>
               )
@@ -282,7 +301,6 @@ export default function FacilitySetup({ onFacilityChange }) {
             </p>
           </div>
 
-          {/* Current recipients list */}
           {emailRecipients.length > 0 && (
             <div className="space-y-1.5">
               {emailRecipients.map(email => (
@@ -309,7 +327,6 @@ export default function FacilitySetup({ onFacilityChange }) {
             <p className="text-xs text-gray-600 italic">No recipients added yet.</p>
           )}
 
-          {/* Add new email */}
           <div className="flex gap-2">
             <input
               type="email"
@@ -425,13 +442,7 @@ export default function FacilitySetup({ onFacilityChange }) {
         {/* App info */}
         <div className="mt-6 pt-4 border-t border-gray-700">
           <div className="text-center">
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <div className="w-6 h-6 rounded bg-amber-500 flex items-center justify-center">
-                <span className="text-gray-900 font-black text-xs">P</span>
-              </div>
-              <span className="text-sm font-bold text-gray-300">P66 Fuel Farm Inspector</span>
-            </div>
-            <p className="text-xs text-gray-600">Phillips 66 Aviation Fueling Operations</p>
+            <span className="text-sm font-bold text-gray-400">Fuel Farm Inspector</span>
             <p className="text-xs text-gray-700 mt-1">v1.0.0</p>
           </div>
         </div>

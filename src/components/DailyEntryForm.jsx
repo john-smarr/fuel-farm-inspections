@@ -17,6 +17,21 @@ const DEFAULT_CHECKS = {
 
 const DEFAULT_SUMP = { solidsCode: null, waterCode: null }
 
+function initTankSumps(inspection, asset) {
+  const count = asset?.sumpCount || 1
+  const blank = () => ({ ...DEFAULT_SUMP })
+  if (inspection?.tankSumps?.length > 0) {
+    const arr = inspection.tankSumps.map(s => ({ ...s }))
+    while (arr.length < count) arr.push(blank())
+    return arr.slice(0, count)
+  }
+  // Backwards compat: old single tankSump field
+  const first = inspection?.tankSump ? { ...inspection.tankSump } : blank()
+  const arr = [first]
+  while (arr.length < count) arr.push(blank())
+  return arr
+}
+
 async function compressPhoto(file) {
   return new Promise((resolve) => {
     const reader = new FileReader()
@@ -37,27 +52,64 @@ async function compressPhoto(file) {
   })
 }
 
-export default function DailyEntryForm({ date, facilityId, facility, onClose, onSaved }) {
-  const existing = getDailyInspection(facilityId, date)
+function formatTimestamp(iso) {
+  if (!iso) return null
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  })
+}
 
-  const [managerTrainer, setManagerTrainer] = useState(existing?.managerTrainer || '')
-  const [checks, setChecks] = useState(existing?.checks || { ...DEFAULT_CHECKS })
-  const [failNotes, setFailNotes] = useState(existing?.failNotes || {})
-  const [failPhotos, setFailPhotos] = useState(existing?.failPhotos || {})
-  const [tankSump, setTankSump] = useState(existing?.tankSump || { ...DEFAULT_SUMP })
-  const [filterVesselSump, setFilterVesselSump] = useState(existing?.filterVesselSump || { ...DEFAULT_SUMP })
-  const [dpPressure, setDpPressure] = useState(existing?.dpPressure ?? '')
-  const [comment, setComment] = useState(existing?.comment || '')
-  const [signature, setSignature] = useState(existing?.signature || '')
+function loadInspectionForAsset(facilityId, assetId, date) {
+  if (!assetId) return null
+  return getDailyInspection(facilityId, assetId, date)
+}
+
+export default function DailyEntryForm({ date, facilityId, facility, onClose, onSaved }) {
+  const assets = facility?.assets || []
+  const firstAssetId = assets[0]?.id || null
+  const firstAsset = assets[0] || null
+
+  const initialInspection = loadInspectionForAsset(facilityId, firstAssetId, date)
+
+  const [selectedAssetId, setSelectedAssetId] = useState(firstAssetId)
+  const [existingRecord, setExistingRecord] = useState(initialInspection)
+  const [managerTrainer, setManagerTrainer] = useState(initialInspection?.managerTrainer || '')
+  const [checks, setChecks] = useState(initialInspection?.checks || { ...DEFAULT_CHECKS })
+  const [failNotes, setFailNotes] = useState(initialInspection?.failNotes || {})
+  const [failPhotos, setFailPhotos] = useState(initialInspection?.failPhotos || {})
+  const [tankSumps, setTankSumps] = useState(() => initTankSumps(initialInspection, firstAsset))
+  const [filterVesselSump, setFilterVesselSump] = useState(initialInspection?.filterVesselSump || { ...DEFAULT_SUMP })
+  const [dpPressure, setDpPressure] = useState(initialInspection?.dpPressure ?? '')
+  const [comment, setComment] = useState(initialInspection?.comment || '')
+  const [signature, setSignature] = useState(initialInspection?.signature || '')
   const [showConfirmDelete, setShowConfirmDelete] = useState(false)
   const [showExport, setShowExport] = useState(false)
   const [errors, setErrors] = useState({})
   const [emailAlertUrl, setEmailAlertUrl] = useState(null)
 
+  const handleAssetChange = (assetId) => {
+    const insp = loadInspectionForAsset(facilityId, assetId, date)
+    const asset = assets.find(a => a.id === assetId)
+    setSelectedAssetId(assetId)
+    setExistingRecord(insp)
+    setManagerTrainer(insp?.managerTrainer || '')
+    setChecks(insp?.checks || { ...DEFAULT_CHECKS })
+    setFailNotes(insp?.failNotes || {})
+    setFailPhotos(insp?.failPhotos || {})
+    setTankSumps(initTankSumps(insp, asset))
+    setFilterVesselSump(insp?.filterVesselSump || { ...DEFAULT_SUMP })
+    setDpPressure(insp?.dpPressure ?? '')
+    setComment(insp?.comment || '')
+    setSignature(insp?.signature || '')
+    setErrors({})
+    setEmailAlertUrl(null)
+    setShowConfirmDelete(false)
+  }
+
   const toggleCheck = (key) => {
     setChecks(prev => {
       const next = { ...prev, [key]: !prev[key] }
-      // If toggled back to pass, clear its fail note/photo and any error
       if (next[key] === true) {
         setFailNotes(fn => { const n = { ...fn }; delete n[key]; return n })
         setFailPhotos(fp => { const p = { ...fp }; delete p[key]; return p })
@@ -83,10 +135,10 @@ export default function DailyEntryForm({ date, facilityId, facility, onClose, on
   const handleSave = () => {
     const newErrors = {}
 
+    if (!selectedAssetId) newErrors.asset = 'Select an asset to inspect'
     if (!managerTrainer.trim()) newErrors.managerTrainer = 'Manager / Trainer name is required'
     if (!signature.trim()) newErrors.signature = 'Signature is required'
 
-    // Every failed check needs a note
     Object.entries(checks).forEach(([key, pass]) => {
       if (!pass && !(failNotes[key] || '').trim()) {
         newErrors[key] = 'A note is required for failed items'
@@ -98,31 +150,35 @@ export default function DailyEntryForm({ date, facilityId, facility, onClose, on
       return
     }
 
+    const now = new Date().toISOString()
     const inspection = {
-      id: existing?.id || generateId(),
+      id: existingRecord?.id || generateId(),
       facilityId,
+      assetId: selectedAssetId,
       date,
+      createdAt: existingRecord?.createdAt || now,
+      updatedAt: now,
       managerTrainer,
       checks,
       failNotes,
       failPhotos,
-      tankSump,
+      tankSumps,
       filterVesselSump,
       dpPressure: dpPressure !== '' ? Number(dpPressure) : null,
       signature,
       comment,
     }
     saveDailyInspection(inspection)
+    setExistingRecord(inspection)
     if (onSaved) onSaved()
 
-    // Offer email alert if there are failures and recipients configured
     const settings = getSettings()
     const anyFail = Object.values(checks).some(v => !v)
     if (anyFail && settings.emailRecipients.length > 0) {
       const url = buildDailyEmailUrl({ facility, inspection })
       if (url) {
         setEmailAlertUrl(url)
-        return // Stay open to show the email prompt
+        return
       }
     }
 
@@ -130,44 +186,47 @@ export default function DailyEntryForm({ date, facilityId, facility, onClose, on
   }
 
   const handleDelete = () => {
-    deleteDailyInspection(facilityId, date)
+    deleteDailyInspection(facilityId, selectedAssetId, date)
     if (onSaved) onSaved()
     onClose()
   }
 
-  const handleExportInspection = () => {
-    return {
-      id: existing?.id || generateId(),
-      facilityId,
-      date,
-      managerTrainer,
-      checks,
-      failNotes,
-      failPhotos,
-      tankSump,
-      filterVesselSump,
-      dpPressure: dpPressure !== '' ? Number(dpPressure) : null,
-      signature,
-      comment,
-    }
-  }
+  const buildCurrentInspection = () => ({
+    id: existingRecord?.id || generateId(),
+    facilityId,
+    assetId: selectedAssetId,
+    date,
+    createdAt: existingRecord?.createdAt,
+    updatedAt: existingRecord?.updatedAt,
+    managerTrainer,
+    checks,
+    failNotes,
+    failPhotos,
+    tankSumps,
+    filterVesselSump,
+    dpPressure: dpPressure !== '' ? Number(dpPressure) : null,
+    signature,
+    comment,
+  })
 
   if (showExport) {
+    const selectedAsset = assets.find(a => a.id === selectedAssetId)
     return (
       <DailyExportView
-        inspection={handleExportInspection()}
+        inspection={buildCurrentInspection()}
         facility={facility}
+        asset={selectedAsset}
         onClose={() => setShowExport(false)}
       />
     )
   }
 
-  // Format date for display
   const [year, month, day] = date.split('-')
   const displayDate = new Date(Number(year), Number(month) - 1, Number(day))
     .toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 
   const allPass = Object.values(checks).every(Boolean)
+  const selectedAsset = assets.find(a => a.id === selectedAssetId)
 
   return (
     <>
@@ -187,6 +246,11 @@ export default function DailyEntryForm({ date, facilityId, facility, onClose, on
             <h2 className="font-bold text-white text-lg">Daily Inspection</h2>
             <p className="text-sm text-gray-400">{displayDate}</p>
             <p className="text-xs text-amber-500 mt-0.5">{facility?.name || 'No facility'}</p>
+            {existingRecord?.updatedAt && (
+              <p className="text-xs text-gray-600 mt-0.5">
+                Saved {formatTimestamp(existingRecord.updatedAt)}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -209,6 +273,47 @@ export default function DailyEntryForm({ date, facilityId, facility, onClose, on
         {/* Scrollable form body */}
         <div className="flex-1 overflow-y-auto">
           <div className="px-4 py-4 space-y-6 pb-6">
+
+            {/* Asset selector */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                Inspecting
+                <span className="text-red-400 ml-1">*</span>
+              </label>
+              {assets.length === 0 ? (
+                <p className="text-sm text-yellow-400 bg-yellow-900/20 border border-yellow-700/40 rounded-xl px-3 py-2">
+                  No assets configured. Go to Settings → Facility to add tanks or trucks.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {assets.map(asset => (
+                    <button
+                      key={asset.id}
+                      type="button"
+                      onClick={() => handleAssetChange(asset.id)}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-medium transition-all ${
+                        selectedAssetId === asset.id
+                          ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                          : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      <span className={`text-xs font-bold px-1 py-0.5 rounded ${
+                        asset.type === 'tank' ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'
+                      }`}>
+                        {asset.type === 'tank' ? 'T' : 'TR'}
+                      </span>
+                      {asset.name}
+                      {getDailyInspection(facilityId, asset.id, date) && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {errors.asset && (
+                <p className="text-xs text-red-400 mt-1">{errors.asset}</p>
+              )}
+            </div>
 
             {/* Manager/Trainer */}
             <div>
@@ -247,7 +352,6 @@ export default function DailyEntryForm({ date, facilityId, facility, onClose, on
                   const hasNoteError = !!errors[key]
                   return (
                     <div key={key}>
-                      {/* Check row */}
                       <div
                         className={`flex items-center gap-3 px-3 py-3 rounded-xl border transition-all ${
                           pass
@@ -275,7 +379,6 @@ export default function DailyEntryForm({ date, facilityId, facility, onClose, on
                         </button>
                       </div>
 
-                      {/* Fail note expansion */}
                       {!pass && (
                         <div className="mt-1 rounded-xl border border-red-500/30 bg-red-950/30 px-3 py-3 space-y-2">
                           <div>
@@ -342,14 +445,20 @@ export default function DailyEntryForm({ date, facilityId, facility, onClose, on
               </div>
             </div>
 
-            {/* Tank Sump */}
-            <div className="card p-4">
-              <SumpCodePicker
-                label="Tank Sump"
-                value={tankSump}
-                onChange={setTankSump}
-              />
-            </div>
+            {/* Tank Sump(s) */}
+            {tankSumps.map((sump, idx) => (
+              <div key={idx} className="card p-4">
+                <SumpCodePicker
+                  label={tankSumps.length === 1 ? 'Tank Sump' : `Tank Sump ${idx + 1}`}
+                  value={sump}
+                  onChange={(val) => {
+                    const updated = [...tankSumps]
+                    updated[idx] = val
+                    setTankSumps(updated)
+                  }}
+                />
+              </div>
+            ))}
 
             {/* Filter Vessel Sump */}
             <div className="card p-4">
@@ -414,7 +523,7 @@ export default function DailyEntryForm({ date, facilityId, facility, onClose, on
             </div>
 
             {/* Delete button (existing entries) */}
-            {existing && (
+            {existingRecord && (
               <div>
                 {showConfirmDelete ? (
                   <div className="bg-red-900/30 border border-red-700 rounded-xl p-4 space-y-3">
@@ -443,7 +552,6 @@ export default function DailyEntryForm({ date, facilityId, facility, onClose, on
 
         {/* Action buttons */}
         <div className="px-4 py-4 border-t border-gray-800 bg-gray-900 safe-bottom">
-          {/* Email alert prompt */}
           {emailAlertUrl && (
             <div className="mb-3 flex items-center justify-between bg-amber-900/30 border border-amber-600/40 rounded-xl px-3 py-2.5">
               <span className="text-sm text-amber-300 font-medium">Failures recorded</span>
@@ -459,12 +567,12 @@ export default function DailyEntryForm({ date, facilityId, facility, onClose, on
             </div>
           )}
           <div className="flex gap-3">
-            <button onClick={emailAlertUrl ? onClose : onClose} className="btn-secondary flex-1">
+            <button onClick={onClose} className="btn-secondary flex-1">
               {emailAlertUrl ? 'Skip & Close' : 'Cancel'}
             </button>
             {!emailAlertUrl && (
               <button onClick={handleSave} className="btn-primary flex-1">
-                {existing ? 'Update' : 'Save'} Inspection
+                {existingRecord ? 'Update' : 'Save'} Inspection
               </button>
             )}
           </div>

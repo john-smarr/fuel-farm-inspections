@@ -15,9 +15,9 @@ export function buildDailyEmailUrl({ facility, inspection }) {
 
   if (failedItems.length === 0) return null
 
-  const subject = `[P66 ALERT] Daily Inspection Failure — ${facility?.name || ''} — ${inspection.date}`
+  const subject = `[ALERT] Daily Inspection Failure — ${facility?.name || ''} — ${inspection.date}`
   const body = [
-    `PHILLIPS 66 FUEL FARM — DAILY INSPECTION ALERT`,
+    `FUEL FARM — DAILY INSPECTION ALERT`,
     ``,
     `Facility: ${facility?.name || '—'} (${facility?.facilityId || '—'})`,
     `Date: ${inspection.date}`,
@@ -33,7 +33,7 @@ export function buildDailyEmailUrl({ facility, inspection }) {
     ``,
     `Signature: ${inspection.signature || '—'}`,
     ``,
-    `-- Sent from P66 Fuel Farm Inspector`,
+    `-- Sent from Fuel Farm Inspector`,
   ].filter(l => l !== undefined).join('\n')
 
   return `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
@@ -53,9 +53,9 @@ export function buildMonthlyEmailUrl({ facility, inspection }) {
 
   if (commentItems.length === 0) return null
 
-  const subject = `[P66 ALERT] Monthly Inspection Comment — ${facility?.name || ''} — ${inspection.yearMonth}`
+  const subject = `[ALERT] Monthly Inspection Comment — ${facility?.name || ''} — ${inspection.yearMonth}`
   const body = [
-    `PHILLIPS 66 FUEL FARM — MONTHLY INSPECTION ALERT`,
+    `FUEL FARM — MONTHLY INSPECTION ALERT`,
     ``,
     `Facility: ${facility?.name || '—'} (${facility?.facilityId || '—'})`,
     `Period: ${inspection.yearMonth}`,
@@ -63,7 +63,7 @@ export function buildMonthlyEmailUrl({ facility, inspection }) {
     `ITEMS REQUIRING COMMENT/ACTION:`,
     ...commentItems,
     ``,
-    `-- Sent from P66 Fuel Farm Inspector`,
+    `-- Sent from Fuel Farm Inspector`,
   ].join('\n')
 
   return `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`

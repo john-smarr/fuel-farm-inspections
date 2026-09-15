@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { MONTHLY_ITEMS, MONTHLY_RATINGS } from '../data/constants'
-import { getMonthlyInspection, saveMonthlyInspection, generateId, getSettings } from '../data/storage'
+import { getMonthlyInspection, saveMonthlyInspection, deleteMonthlyInspection, generateId, getSettings } from '../data/storage'
 import { buildMonthlyEmailUrl } from '../utils/email'
 import { MonthlyExportView } from './ExportView'
 
@@ -31,20 +31,30 @@ function buildDefaultItems() {
   return items
 }
 
+function formatTimestamp(iso) {
+  if (!iso) return null
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  })
+}
+
 export default function MonthlyInspection({ facilityId, facility }) {
+  const assets = facility?.assets || []
+  const [selectedAssetId, setSelectedAssetId] = useState(assets[0]?.id || null)
   const [yearMonth, setYearMonth] = useState(getTodayYearMonth())
   const [items, setItems] = useState(buildDefaultItems())
+  const [existingRecord, setExistingRecord] = useState(null)
   const [saved, setSaved] = useState(false)
   const [showExport, setShowExport] = useState(false)
   const [saveStatus, setSaveStatus] = useState(null) // null | 'saved'
   const [errors, setErrors] = useState({})
   const [emailAlertUrl, setEmailAlertUrl] = useState(null)
 
-  const loadData = () => {
-    if (!facilityId) return
-    const existing = getMonthlyInspection(facilityId, yearMonth)
+  const loadData = (assetId, ym) => {
+    if (!facilityId || !assetId) return
+    const existing = getMonthlyInspection(facilityId, assetId, ym)
     if (existing?.items) {
-      // Merge with defaults in case new keys were added
       const merged = buildDefaultItems()
       Object.keys(merged).forEach(key => {
         if (existing.items[key]) {
@@ -52,16 +62,25 @@ export default function MonthlyInspection({ facilityId, facility }) {
         }
       })
       setItems(merged)
+      setExistingRecord(existing)
       setSaved(true)
     } else {
       setItems(buildDefaultItems())
+      setExistingRecord(null)
       setSaved(false)
     }
   }
 
   useEffect(() => {
-    loadData()
-  }, [facilityId, yearMonth])
+    loadData(selectedAssetId, yearMonth)
+  }, [facilityId, selectedAssetId, yearMonth])
+
+  const handleAssetChange = (assetId) => {
+    setSelectedAssetId(assetId)
+    setErrors({})
+    setEmailAlertUrl(null)
+    setSaveStatus(null)
+  }
 
   const prevMonth = () => {
     const [y, m] = yearMonth.split('-').map(Number)
@@ -91,9 +110,8 @@ export default function MonthlyInspection({ facilityId, facility }) {
   }
 
   const handleSave = () => {
-    if (!facilityId) return
+    if (!facilityId || !selectedAssetId) return
 
-    // Validate: 'C' rated items must have maintenanceActionNotes
     const newErrors = {}
     Object.entries(items).forEach(([key, item]) => {
       if (item.rating === 'C' && !(item.maintenanceActionNotes || '').trim()) {
@@ -106,19 +124,22 @@ export default function MonthlyInspection({ facilityId, facility }) {
     }
     setErrors({})
 
-    const existingRecord = getMonthlyInspection(facilityId, yearMonth)
+    const now = new Date().toISOString()
     const inspection = {
       id: existingRecord?.id || generateId(),
       facilityId,
+      assetId: selectedAssetId,
       yearMonth,
+      createdAt: existingRecord?.createdAt || now,
+      updatedAt: now,
       items,
     }
     saveMonthlyInspection(inspection)
+    setExistingRecord(inspection)
     setSaved(true)
     setSaveStatus('saved')
     setTimeout(() => setSaveStatus(null), 2500)
 
-    // Offer email alert if any 'C' items and recipients configured
     const settings = getSettings()
     const anyComment = Object.values(items).some(item => item.rating === 'C')
     if (anyComment && settings.emailRecipients.length > 0) {
@@ -130,9 +151,12 @@ export default function MonthlyInspection({ facilityId, facility }) {
   }
 
   const handleExportInspection = () => ({
-    id: generateId(),
+    id: existingRecord?.id || generateId(),
     facilityId,
+    assetId: selectedAssetId,
     yearMonth,
+    createdAt: existingRecord?.createdAt,
+    updatedAt: existingRecord?.updatedAt,
     items,
   })
 
@@ -151,10 +175,12 @@ export default function MonthlyInspection({ facilityId, facility }) {
   }
 
   if (showExport) {
+    const selectedAsset = assets.find(a => a.id === selectedAssetId)
     return (
       <MonthlyExportView
         inspection={handleExportInspection()}
         facility={facility}
+        asset={selectedAsset}
         onClose={() => setShowExport(false)}
       />
     )
@@ -163,6 +189,44 @@ export default function MonthlyInspection({ facilityId, facility }) {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="p-4 max-w-lg mx-auto pb-6">
+
+        {/* Asset selector */}
+        {assets.length === 0 ? (
+          <div className="mb-4 text-sm text-yellow-400 bg-yellow-900/20 border border-yellow-700/40 rounded-xl px-3 py-2">
+            No assets configured. Go to Settings → Facility to add tanks or trucks.
+          </div>
+        ) : (
+          <div className="mb-4">
+            <p className="text-xs text-gray-500 mb-2">Inspecting</p>
+            <div className="flex flex-wrap gap-2">
+              {assets.map(asset => (
+                <button
+                  key={asset.id}
+                  type="button"
+                  onClick={() => handleAssetChange(asset.id)}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-medium transition-all ${
+                    selectedAssetId === asset.id
+                      ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                      : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  <span className={`text-xs font-bold px-1 py-0.5 rounded ${
+                    asset.type === 'tank' ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'
+                  }`}>
+                    {asset.type === 'tank' ? 'T' : 'TR'}
+                  </span>
+                  {asset.name}
+                </button>
+              ))}
+            </div>
+            {existingRecord?.updatedAt && (
+              <p className="text-xs text-gray-600 mt-2">
+                Saved {formatTimestamp(existingRecord.updatedAt)}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Month selector */}
         <div className="flex items-center justify-between mb-4">
           <button

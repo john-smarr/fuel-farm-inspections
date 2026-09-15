@@ -16,6 +16,7 @@ const sections = [
       'Tap Settings (bottom right)',
       'Tap Add and enter your Facility ID (e.g. PDX-01) and location name',
       'Tap Save — the facility is now active',
+      'Add assets (tanks and trucks) to the facility using the + Tank / + Truck buttons',
       'Optionally add email addresses under Email Alert Recipients so failures trigger a notification',
     ],
   },
@@ -185,7 +186,7 @@ export default function HelpScreen({ onClose }) {
           </div>
           <div>
             <h1 className="text-sm font-bold text-white">How to Use</h1>
-            <p className="text-xs text-gray-500">P66 Fuel Farm Inspector</p>
+            <p className="text-xs text-gray-500">Fuel Farm Inspector</p>
           </div>
         </div>
         <button onClick={onClose} className="p-2 text-gray-400 hover:text-white transition-colors">

@@ -9,9 +9,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'icons/icon.svg'],
       manifest: {
-        name: 'P66 Fuel Farm Inspector',
+        name: 'Fuel Farm Inspector',
         short_name: 'FuelInspect',
-        description: 'Phillips 66 Fuel Farm Inspection App',
+        description: 'Fuel Farm Inspection App',
         theme_color: '#1f2937',
         background_color: '#111827',
         display: 'standalone',
