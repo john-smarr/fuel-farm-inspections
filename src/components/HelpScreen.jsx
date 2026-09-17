@@ -16,8 +16,32 @@ const sections = [
       'Tap Settings (bottom right)',
       'Tap Add and enter your Facility ID (e.g. PDX-01) and location name',
       'Tap Save — the facility is now active',
-      'Add assets (tanks and trucks) to the facility using the + Tank / + Truck buttons',
+      'Tap Manage Assets → on the facility card to configure its tanks and trucks',
       'Optionally add email addresses under Email Alert Recipients so failures trigger a notification',
+    ],
+  },
+  {
+    id: 'asset-setup',
+    title: 'Asset Setup',
+    subtitle: 'Tanks & trucks',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7M4 7c0-2 1-3 3-3h10c2 0 3 1 3 3M4 7h16M10 11v6M14 11v6" />
+      </svg>
+    ),
+    color: 'text-blue-400',
+    bg: 'bg-blue-500/10 border-blue-500/20',
+    steps: [
+      'Go to Settings → find your facility → tap Manage Assets →',
+      'Add each physical tank and fuel truck at your location as separate assets',
+      'Tanks and trucks each get their own daily inspection record, so add one per physical unit',
+      'For each tank, set the Fuel Type (Jet A, Jet A-1, 100LL AvGas, or Other) — this is shown on inspection reports',
+      'Sump Points is how many sump drain points the tank has — the daily inspection will show one sump reading entry per point',
+      'Capacity and Serial / ID # are optional but useful for record-keeping and printed reports',
+      'Use Notes for anything site-specific — pump location, valve labels, quirks inspectors should know',
+      'Trucks only have a name and notes — they share the same 7-item daily checklist as tanks',
+      'You can edit any asset later without affecting past inspection records',
+      'Deleting an asset does not delete its past inspection records — they remain in the calendar',
     ],
   },
   {

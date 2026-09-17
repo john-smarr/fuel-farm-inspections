@@ -65,10 +65,10 @@ function loadInspectionForAsset(facilityId, assetId, date) {
   return getDailyInspection(facilityId, assetId, date)
 }
 
-export default function DailyEntryForm({ date, facilityId, facility, onClose, onSaved }) {
+export default function DailyEntryForm({ date, facilityId, facility, initialAssetId, onClose, onSaved }) {
   const assets = facility?.assets || []
-  const firstAssetId = assets[0]?.id || null
-  const firstAsset = assets[0] || null
+  const firstAssetId = initialAssetId || assets[0]?.id || null
+  const firstAsset = assets.find(a => a.id === firstAssetId) || assets[0] || null
 
   const initialInspection = loadInspectionForAsset(facilityId, firstAssetId, date)
 

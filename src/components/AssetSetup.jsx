@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
 import { saveFacility, generateId } from '../data/storage'
 
 const FUEL_TYPES = ['Jet A', 'Jet A-1', '100LL AvGas', 'Other']
@@ -159,10 +160,47 @@ function TruckForm({ initial, onSave, onCancel }) {
   )
 }
 
+function QRModal({ asset, facility, onClose }) {
+  const qrValue = `ffi:asset:${asset.id}`
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/80 z-[60]" onClick={onClose} />
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-8 pointer-events-none">
+        <div className="bg-white rounded-2xl p-6 text-center shadow-2xl pointer-events-auto max-w-xs w-full">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">{facility?.name}</p>
+          <p className="text-lg font-black text-gray-900 mb-4">{asset.name}</p>
+          <div className="flex justify-center mb-4">
+            <QRCodeSVG
+              value={qrValue}
+              size={200}
+              level="M"
+              includeMargin
+            />
+          </div>
+          {asset.fuelType && (
+            <p className="text-sm font-semibold text-gray-700 mb-1">{asset.fuelType}</p>
+          )}
+          {asset.serialNumber && (
+            <p className="text-xs text-gray-400 font-mono">#{asset.serialNumber}</p>
+          )}
+          <p className="text-xs text-gray-300 mt-3 font-mono break-all">{qrValue}</p>
+          <button
+            onClick={onClose}
+            className="mt-4 w-full py-2 rounded-xl bg-gray-900 text-white text-sm font-semibold"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
 export default function AssetSetup({ facility, onClose, onUpdate }) {
   const [assets, setAssets] = useState(facility?.assets || [])
   const [editingId, setEditingId] = useState(null) // 'new-tank' | 'new-truck' | asset.id
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
+  const [showQRFor, setShowQRFor] = useState(null) // asset.id
 
   const tanks = assets.filter(a => a.type === 'tank')
   const trucks = assets.filter(a => a.type === 'truck')
@@ -200,6 +238,10 @@ export default function AssetSetup({ facility, onClose, onUpdate }) {
 
   return (
     <>
+      {showQRFor && (() => {
+        const asset = assets.find(a => a.id === showQRFor)
+        return asset ? <QRModal asset={asset} facility={facility} onClose={() => setShowQRFor(null)} /> : null
+      })()}
       <div className="fixed inset-0 bg-black/60 z-40" />
       <div className="fixed inset-0 z-50 bg-gray-900 flex flex-col max-w-screen-sm mx-auto">
 
@@ -291,6 +333,16 @@ export default function AssetSetup({ facility, onClose, onUpdate }) {
                           )}
                         </div>
                         <div className="flex items-center gap-0.5 flex-shrink-0">
+                          <button
+                            onClick={() => setShowQRFor(tank.id)}
+                            className="p-1.5 text-gray-500 hover:text-amber-400 transition-colors"
+                            aria-label={`Show QR code for ${tank.name}`}
+                            title="Show QR code"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                            </svg>
+                          </button>
                           <button
                             onClick={() => startEdit(tank.id)}
                             className="p-1.5 text-gray-500 hover:text-amber-400 transition-colors"

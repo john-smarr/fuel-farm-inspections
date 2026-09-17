@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import Navigation from './components/Navigation'
+import ScannerView from './components/ScannerView'
 import CalendarGrid from './components/CalendarGrid'
 import MonthlyInspection from './components/MonthlyInspection'
 import FacilitySetup from './components/FacilitySetup'
@@ -16,7 +17,7 @@ function getActiveFacility() {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('daily')
+  const [activeTab, setActiveTab] = useState('scan')
   const [facility, setFacility] = useState(() => getActiveFacility())
   const [showLegend, setShowLegend] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
@@ -74,6 +75,14 @@ export default function App() {
 
       {/* Main content area */}
       <main className="flex-1 overflow-hidden flex flex-col" style={{ paddingBottom: '65px' }}>
+        {/* Tab: Scan */}
+        {activeTab === 'scan' && (
+          <ScannerView
+            facilityId={facility?.id}
+            facility={facility}
+          />
+        )}
+
         {/* Tab: Daily */}
         {activeTab === 'daily' && (
           <CalendarGrid
