@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import LoginScreen, { isAuthenticated, logout } from './components/LoginScreen'
 import Navigation from './components/Navigation'
 import ScannerView from './components/ScannerView'
 import CalendarGrid from './components/CalendarGrid'
@@ -17,6 +18,7 @@ function getActiveFacility() {
 }
 
 export default function App() {
+  const [authed, setAuthed] = useState(() => isAuthenticated())
   const [activeTab, setActiveTab] = useState('scan')
   const [facility, setFacility] = useState(() => getActiveFacility())
   const [showLegend, setShowLegend] = useState(false)
@@ -33,6 +35,10 @@ export default function App() {
     setActiveTab(tab)
   }
 
+  if (!authed) {
+    return <LoginScreen onLogin={() => setAuthed(true)} />
+  }
+
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-gray-100 max-w-screen-sm mx-auto">
       {/* Header */}
@@ -43,6 +49,7 @@ export default function App() {
               <h1 className="text-sm font-bold text-white leading-tight">Fuel Farm Inspector</h1>
             </div>
           </div>
+          <div className="flex items-center gap-1">
           {/* Help button */}
           <button
             onClick={() => setShowHelp(true)}
@@ -53,6 +60,18 @@ export default function App() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </button>
+          {/* Logout button */}
+          <button
+            onClick={() => { logout(); setAuthed(false) }}
+            className="p-1.5 text-gray-500 hover:text-red-400 transition-colors"
+            aria-label="Sign out"
+            title="Sign out"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </button>
+          </div>
 
           {/* Active facility badge */}
           <div className="text-right min-w-0">
