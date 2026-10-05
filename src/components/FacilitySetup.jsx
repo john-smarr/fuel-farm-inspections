@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 import { getFacilities, saveFacility, deleteFacility, getActiveFacilityId, setActiveFacilityId, generateId, getSettings, saveSettings } from '../data/storage'
 import { loadDemoData, clearDemoData } from '../data/seed'
+import { saveCredentials, verifyCredentials } from './LoginScreen'
+import PrivacyPolicyScreen from './PrivacyPolicyScreen'
 
 function exportAllData() {
   const data = {}
@@ -53,6 +55,13 @@ export default function FacilitySetup({ onFacilityChange, onOpenAssets }) {
   const [emailRecipients, setEmailRecipients] = useState(() => getSettings().emailRecipients || [])
   const [newEmail, setNewEmail] = useState('')
   const [emailError, setEmailError] = useState('')
+  const [currentPw, setCurrentPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
+  const [pwError, setPwError] = useState('')
+  const [pwSuccess, setPwSuccess] = useState(false)
+  const [pwLoading, setPwLoading] = useState(false)
+  const [showPrivacy, setShowPrivacy] = useState(false)
 
   const refresh = () => {
     setFacilities(getFacilities())
@@ -118,8 +127,33 @@ export default function FacilitySetup({ onFacilityChange, onOpenAssets }) {
     saveSettings({ ...getSettings(), emailRecipients: updated })
   }
 
+  const handleChangePassword = async () => {
+    setPwError('')
+    setPwSuccess(false)
+    if (!currentPw) { setPwError('Enter your current password'); return }
+    if (newPw.length < 8) { setPwError('New password must be at least 8 characters'); return }
+    if (newPw !== confirmPw) { setPwError('New passwords do not match'); return }
+    setPwLoading(true)
+    const stored = localStorage.getItem('ffi_credentials')
+    const { username } = stored ? JSON.parse(stored) : {}
+    const ok = await verifyCredentials(username || '', currentPw)
+    if (!ok) {
+      setPwLoading(false)
+      setPwError('Current password is incorrect')
+      return
+    }
+    await saveCredentials(username, newPw)
+    setPwLoading(false)
+    setCurrentPw('')
+    setNewPw('')
+    setConfirmPw('')
+    setPwSuccess(true)
+    setTimeout(() => setPwSuccess(false), 3000)
+  }
+
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto relative">
+      {showPrivacy && <PrivacyPolicyScreen onClose={() => setShowPrivacy(false)} />}
       <div className="p-4 space-y-4 max-w-lg mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -439,8 +473,75 @@ export default function FacilitySetup({ onFacilityChange, onOpenAssets }) {
           </div>
         </div>
 
-        {/* App info */}
+        {/* Security — Change Password */}
+        <div className="mt-6 pt-4 border-t border-gray-700 space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-300 mb-1">Security</h3>
+            <p className="text-xs text-gray-500 mb-3">Change your login password.</p>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Current Password</label>
+            <input
+              type="password"
+              value={currentPw}
+              onChange={e => { setCurrentPw(e.target.value); setPwError(''); setPwSuccess(false) }}
+              placeholder="Current password"
+              autoComplete="current-password"
+              className="input-field"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">New Password</label>
+            <input
+              type="password"
+              value={newPw}
+              onChange={e => { setNewPw(e.target.value); setPwError(''); setPwSuccess(false) }}
+              placeholder="At least 8 characters"
+              autoComplete="new-password"
+              className="input-field"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Confirm New Password</label>
+            <input
+              type="password"
+              value={confirmPw}
+              onChange={e => { setConfirmPw(e.target.value); setPwError(''); setPwSuccess(false) }}
+              placeholder="Repeat new password"
+              autoComplete="new-password"
+              className="input-field"
+            />
+          </div>
+          {pwError && (
+            <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded-lg px-3 py-2">{pwError}</p>
+          )}
+          {pwSuccess && (
+            <p className="text-xs text-green-400 bg-green-900/20 border border-green-800/40 rounded-lg px-3 py-2">Password updated successfully.</p>
+          )}
+          <button
+            onClick={handleChangePassword}
+            disabled={pwLoading}
+            className="btn-primary w-full text-sm disabled:opacity-50"
+          >
+            {pwLoading ? 'Updating…' : 'Update Password'}
+          </button>
+        </div>
+
+        {/* Privacy */}
         <div className="mt-6 pt-4 border-t border-gray-700">
+          <button
+            onClick={() => setShowPrivacy(true)}
+            className="w-full flex items-center justify-between py-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            <span>Privacy Policy</span>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+
+        {/* App info */}
+        <div className="mt-2 pt-4 border-t border-gray-700">
           <div className="text-center">
             <span className="text-sm font-bold text-gray-400">Fuel Farm Inspector</span>
             <p className="text-xs text-gray-700 mt-1">v1.0.0</p>

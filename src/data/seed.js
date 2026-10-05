@@ -212,10 +212,11 @@ export function loadDemoData() {
 }
 
 export function clearDemoData() {
+  const preserve = new Set(['ffi_auth', 'ffi_credentials'])
   const keys = []
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i)
-    if (k?.startsWith('ffi_')) keys.push(k)
+    if (k?.startsWith('ffi_') && !preserve.has(k)) keys.push(k)
   }
   keys.forEach(k => localStorage.removeItem(k))
 }
