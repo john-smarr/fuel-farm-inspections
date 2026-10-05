@@ -1,4 +1,4 @@
-package com.perrybrosaviation.inspector;
+package com.perrybrosaviation.fuelfarminspector;
 
 import com.getcapacitor.BridgeActivity;
 

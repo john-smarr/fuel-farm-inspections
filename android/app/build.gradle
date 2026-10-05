@@ -7,10 +7,10 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace "com.perrybrosaviation.inspector"
+    namespace "com.perrybrosaviation.fuelfarminspector"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.perrybrosaviation.inspector"
+        applicationId "com.perrybrosaviation.fuelfarminspector"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 2
