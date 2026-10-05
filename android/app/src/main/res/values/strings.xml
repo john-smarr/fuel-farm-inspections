@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Fuel Farm Inspector</string>
+    <string name="title_activity_main">Fuel Farm Inspector</string>
+    <string name="package_name">com.p66.fuelfarminspector</string>
+    <string name="custom_url_scheme">com.p66.fuelfarminspector</string>
+</resources>

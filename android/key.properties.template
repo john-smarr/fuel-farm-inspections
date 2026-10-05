@@ -1,0 +1,7 @@
+# Copy this file to key.properties (sibling of this file) and fill in your values.
+# NEVER commit key.properties to git — it contains your signing secrets.
+
+storeFile=../keystore/fuel-farm-inspector.jks
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyAlias=fuel-farm-inspector
+keyPassword=YOUR_KEY_PASSWORD
