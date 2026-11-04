@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'icons/icon.svg'],
       manifest: {
-        name: 'Fuel Farm Inspector',
-        short_name: 'FuelInspect',
+        name: 'PBA Fuel Farm Inspector',
+        short_name: 'PBA FuelInspect',
         description: 'Fuel Farm Inspection App',
         theme_color: '#1f2937',
         background_color: '#111827',

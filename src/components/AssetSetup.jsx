@@ -1,8 +1,10 @@
 import React, { useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { saveFacility, generateId } from '../data/storage'
+import { compressPhoto } from '../utils/photo'
 
 const FUEL_TYPES = ['Jet A', 'Jet A-1', '100LL AvGas', 'Other']
+
 
 function EditIcon() {
   return (
@@ -27,6 +29,7 @@ function TankForm({ initial, onSave, onCancel }) {
   const [serialNumber, setSerialNumber] = useState(initial?.serialNumber || '')
   const [sumpCount, setSumpCount] = useState(initial?.sumpCount ?? 1)
   const [notes, setNotes] = useState(initial?.notes || '')
+  const [photo, setPhoto] = useState(initial?.photo || null)
   const [error, setError] = useState('')
 
   const handleSave = () => {
@@ -39,6 +42,7 @@ function TankForm({ initial, onSave, onCancel }) {
       serialNumber: serialNumber.trim(),
       sumpCount: Number(sumpCount) || 1,
       notes: notes.trim(),
+      photo,
     })
   }
 
@@ -98,6 +102,24 @@ function TankForm({ initial, onSave, onCancel }) {
         </div>
       </div>
       <div>
+        <label className="block text-xs text-gray-400 mb-1">Photo</label>
+        {photo ? (
+          <div className="space-y-1">
+            <img src={photo} alt="Tank photo" className="w-full max-h-32 object-cover rounded-lg border border-gray-700" />
+            <button type="button" onClick={() => setPhoto(null)} className="text-xs text-red-400 hover:text-red-300">Remove photo</button>
+          </div>
+        ) : (
+          <label className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-200 cursor-pointer border border-gray-700 hover:border-gray-500 rounded-lg px-3 py-2 transition-colors w-fit">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Take / Attach Photo
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) compressPhoto(file).then(img => setPhoto(img)); e.target.value = '' }} />
+          </label>
+        )}
+      </div>
+      <div>
         <label className="block text-xs text-gray-400 mb-1">Notes</label>
         <textarea
           value={notes}
@@ -118,12 +140,14 @@ function TankForm({ initial, onSave, onCancel }) {
 
 function TruckForm({ initial, onSave, onCancel }) {
   const [name, setName] = useState(initial?.name || '')
+  const [fuelType, setFuelType] = useState(initial?.fuelType || 'Jet A')
   const [notes, setNotes] = useState(initial?.notes || '')
+  const [photo, setPhoto] = useState(initial?.photo || null)
   const [error, setError] = useState('')
 
   const handleSave = () => {
     if (!name.trim()) { setError('Name is required'); return }
-    onSave({ type: 'truck', name: name.trim(), notes: notes.trim() })
+    onSave({ type: 'truck', name: name.trim(), fuelType, notes: notes.trim(), photo })
   }
 
   return (
@@ -140,6 +164,30 @@ function TruckForm({ initial, onSave, onCancel }) {
           className="input-field"
           autoFocus
         />
+      </div>
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Fuel Type</label>
+        <select value={fuelType} onChange={e => setFuelType(e.target.value)} className="input-field">
+          {FUEL_TYPES.map(ft => <option key={ft} value={ft}>{ft}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Photo</label>
+        {photo ? (
+          <div className="space-y-1">
+            <img src={photo} alt="Truck photo" className="w-full max-h-32 object-cover rounded-lg border border-gray-700" />
+            <button type="button" onClick={() => setPhoto(null)} className="text-xs text-red-400 hover:text-red-300">Remove photo</button>
+          </div>
+        ) : (
+          <label className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-200 cursor-pointer border border-gray-700 hover:border-gray-500 rounded-lg px-3 py-2 transition-colors w-fit">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Take / Attach Photo
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) compressPhoto(file).then(img => setPhoto(img)); e.target.value = '' }} />
+          </label>
+        )}
       </div>
       <div>
         <label className="block text-xs text-gray-400 mb-1">Notes</label>
@@ -161,7 +209,8 @@ function TruckForm({ initial, onSave, onCancel }) {
 }
 
 function QRModal({ asset, facility, onClose }) {
-  const qrValue = `ffi:asset:${asset.id}`
+  // If asset has a linked external QR code, show that; otherwise show the generated one
+  const qrValue = asset.qrCode || `ffi:asset:${asset.id}`
   return (
     <>
       <div className="fixed inset-0 bg-black/80 z-[60]" onClick={onClose} />
@@ -183,7 +232,10 @@ function QRModal({ asset, facility, onClose }) {
           {asset.serialNumber && (
             <p className="text-xs text-gray-400 font-mono">#{asset.serialNumber}</p>
           )}
-          <p className="text-xs text-gray-300 mt-3 font-mono break-all">{qrValue}</p>
+          {asset.qrCode && (
+            <p className="text-xs text-green-600 font-medium mt-2">Linked to external QR</p>
+          )}
+          <p className="text-xs text-gray-300 mt-2 font-mono break-all">{qrValue}</p>
           <button
             onClick={onClose}
             className="mt-4 w-full py-2 rounded-xl bg-gray-900 text-white text-sm font-semibold"
@@ -328,6 +380,9 @@ export default function AssetSetup({ facility, onClose, onUpdate }) {
                               <span className="font-mono"># {tank.serialNumber}</span>
                             )}
                           </div>
+                          {tank.photo && (
+                            <img src={tank.photo} alt={tank.name} className="w-full max-h-20 object-cover rounded-lg border border-gray-700 mt-1.5" />
+                          )}
                           {tank.notes && (
                             <p className="text-xs text-gray-600 mt-1 leading-relaxed">{tank.notes}</p>
                           )}
@@ -415,6 +470,14 @@ export default function AssetSetup({ facility, onClose, onUpdate }) {
                             <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400">TRUCK</span>
                             <span className="font-semibold text-white">{truck.name}</span>
                           </div>
+                          {truck.fuelType && (
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500">
+                              <span>{truck.fuelType}</span>
+                            </div>
+                          )}
+                          {truck.photo && (
+                            <img src={truck.photo} alt={truck.name} className="w-full max-h-20 object-cover rounded-lg border border-gray-700 mt-1.5" />
+                          )}
                           {truck.notes && (
                             <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{truck.notes}</p>
                           )}

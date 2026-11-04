@@ -1,18 +1,19 @@
 import React, { useState } from 'react'
 import { DAILY_CHECK_LABELS } from '../data/constants'
-import { saveDailyInspection, getDailyInspection, deleteDailyInspection, generateId, getSettings } from '../data/storage'
+import { saveDailyInspection, getDailyInspection, generateId, getSettings } from '../data/storage'
 import { buildDailyEmailUrl } from '../utils/email'
+import { compressPhoto } from '../utils/photo'
 import SumpCodePicker from './SumpCodePicker'
 import { DailyExportView } from './ExportView'
 
 const DEFAULT_CHECKS = {
-  generalHousekeeping: true,
-  securityFireSafety: true,
-  fuelLeaks: true,
-  bondingCablesClamps: true,
-  fireExtinguishers: true,
-  wasteFuelTanks: true,
-  hosesSwivelsNozzles: true,
+  generalHousekeeping: null,
+  securityFireSafety: null,
+  fuelLeaks: null,
+  bondingCablesClamps: null,
+  fireExtinguishers: null,
+  reclaimTankSystem: null,
+  hosesSwivelsNozzles: null,
 }
 
 const DEFAULT_SUMP = { solidsCode: null, waterCode: null }
@@ -32,25 +33,6 @@ function initTankSumps(inspection, asset) {
   return arr
 }
 
-async function compressPhoto(file) {
-  return new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const img = new Image()
-      img.onload = () => {
-        const MAX = 600
-        const ratio = Math.min(MAX / img.width, MAX / img.height, 1)
-        const canvas = document.createElement('canvas')
-        canvas.width = Math.round(img.width * ratio)
-        canvas.height = Math.round(img.height * ratio)
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
-        resolve(canvas.toDataURL('image/jpeg', 0.6))
-      }
-      img.src = e.target.result
-    }
-    reader.readAsDataURL(file)
-  })
-}
 
 function formatTimestamp(iso) {
   if (!iso) return null
@@ -58,6 +40,11 @@ function formatTimestamp(iso) {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: 'numeric', minute: '2-digit', hour12: true,
   })
+}
+
+function isNon1A(sump) {
+  if (!sump?.solidsCode || !sump?.waterCode) return false
+  return sump.solidsCode !== 1 || sump.waterCode !== 'A'
 }
 
 function loadInspectionForAsset(facilityId, assetId, date) {
@@ -80,10 +67,13 @@ export default function DailyEntryForm({ date, facilityId, facility, initialAsse
   const [failPhotos, setFailPhotos] = useState(initialInspection?.failPhotos || {})
   const [tankSumps, setTankSumps] = useState(() => initTankSumps(initialInspection, firstAsset))
   const [filterVesselSump, setFilterVesselSump] = useState(initialInspection?.filterVesselSump || { ...DEFAULT_SUMP })
+  const [sumpNotes, setSumpNotes] = useState(initialInspection?.sumpNotes || {})
+  const [sumpPhotos, setSumpPhotos] = useState(initialInspection?.sumpPhotos || {})
   const [dpPressure, setDpPressure] = useState(initialInspection?.dpPressure ?? '')
+  const [dpUnavailable, setDpUnavailable] = useState(initialInspection?.dpUnavailable || false)
+  const [dpNote, setDpNote] = useState(initialInspection?.dpNote || '')
   const [comment, setComment] = useState(initialInspection?.comment || '')
   const [signature, setSignature] = useState(initialInspection?.signature || '')
-  const [showConfirmDelete, setShowConfirmDelete] = useState(false)
   const [showExport, setShowExport] = useState(false)
   const [errors, setErrors] = useState({})
   const [emailAlertUrl, setEmailAlertUrl] = useState(null)
@@ -99,17 +89,22 @@ export default function DailyEntryForm({ date, facilityId, facility, initialAsse
     setFailPhotos(insp?.failPhotos || {})
     setTankSumps(initTankSumps(insp, asset))
     setFilterVesselSump(insp?.filterVesselSump || { ...DEFAULT_SUMP })
+    setSumpNotes(insp?.sumpNotes || {})
+    setSumpPhotos(insp?.sumpPhotos || {})
     setDpPressure(insp?.dpPressure ?? '')
+    setDpUnavailable(insp?.dpUnavailable || false)
+    setDpNote(insp?.dpNote || '')
     setComment(insp?.comment || '')
     setSignature(insp?.signature || '')
     setErrors({})
     setEmailAlertUrl(null)
-    setShowConfirmDelete(false)
   }
 
   const toggleCheck = (key) => {
     setChecks(prev => {
-      const next = { ...prev, [key]: !prev[key] }
+      const current = prev[key]
+      // null → true (pass) → false (fail) → true (pass)
+      const next = { ...prev, [key]: current === null ? true : current === true ? false : true }
       if (next[key] === true) {
         setFailNotes(fn => { const n = { ...fn }; delete n[key]; return n })
         setFailPhotos(fp => { const p = { ...fp }; delete p[key]; return p })
@@ -139,11 +134,36 @@ export default function DailyEntryForm({ date, facilityId, facility, initialAsse
     if (!managerTrainer.trim()) newErrors.managerTrainer = 'Manager / Trainer name is required'
     if (!signature.trim()) newErrors.signature = 'Signature is required'
 
-    Object.entries(checks).forEach(([key, pass]) => {
-      if (!pass && !(failNotes[key] || '').trim()) {
+    const uncheckedItems = Object.entries(checks).filter(([, v]) => v === null)
+    if (uncheckedItems.length > 0) {
+      newErrors.checks = 'All inspection items must be marked Pass or Fail'
+    }
+
+    Object.entries(checks).forEach(([key, val]) => {
+      if (val === false && !(failNotes[key] || '').trim()) {
         newErrors[key] = 'A note is required for failed items'
       }
     })
+
+    // Validate non-1A sump codes require note + photo
+    tankSumps.forEach((sump, idx) => {
+      if (isNon1A(sump)) {
+        const sumpKey = `tank_${idx}`
+        if (!(sumpNotes[sumpKey] || '').trim()) newErrors[`sumpNote_${sumpKey}`] = 'Explanation required for non-1A result'
+        if (!sumpPhotos[sumpKey]) newErrors[`sumpPhoto_${sumpKey}`] = 'Photo required for non-1A result'
+      }
+    })
+    if (isNon1A(filterVesselSump)) {
+      if (!(sumpNotes.filter || '').trim()) newErrors.sumpNote_filter = 'Explanation required for non-1A result'
+      if (!sumpPhotos.filter) newErrors.sumpPhoto_filter = 'Photo required for non-1A result'
+    }
+
+    if (!dpUnavailable && dpPressure === '') {
+      newErrors.dpPressure = 'DP pressure reading is required'
+    }
+    if (dpUnavailable && !(dpNote || '').trim()) {
+      newErrors.dpNote = 'Explanation is required when reading is unavailable'
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
@@ -151,6 +171,14 @@ export default function DailyEntryForm({ date, facilityId, facility, initialAsse
     }
 
     const now = new Date().toISOString()
+    const today = new Date().toISOString().slice(0, 10)
+
+    // Track edits to past records
+    let editHistory = existingRecord?.editHistory || []
+    if (existingRecord && date !== today) {
+      editHistory = [...editHistory, { editedAt: now, editedBy: signature }]
+    }
+
     const inspection = {
       id: existingRecord?.id || generateId(),
       facilityId,
@@ -158,13 +186,18 @@ export default function DailyEntryForm({ date, facilityId, facility, initialAsse
       date,
       createdAt: existingRecord?.createdAt || now,
       updatedAt: now,
+      editHistory,
       managerTrainer,
       checks,
       failNotes,
       failPhotos,
       tankSumps,
       filterVesselSump,
+      sumpNotes,
+      sumpPhotos,
       dpPressure: dpPressure !== '' ? Number(dpPressure) : null,
+      dpUnavailable,
+      dpNote: dpUnavailable ? dpNote : '',
       signature,
       comment,
     }
@@ -173,7 +206,7 @@ export default function DailyEntryForm({ date, facilityId, facility, initialAsse
     if (onSaved) onSaved()
 
     const settings = getSettings()
-    const anyFail = Object.values(checks).some(v => !v)
+    const anyFail = Object.values(checks).some(v => v === false)
     if (anyFail && settings.emailRecipients.length > 0) {
       const url = buildDailyEmailUrl({ facility, inspection })
       if (url) {
@@ -185,11 +218,6 @@ export default function DailyEntryForm({ date, facilityId, facility, initialAsse
     onClose()
   }
 
-  const handleDelete = () => {
-    deleteDailyInspection(facilityId, selectedAssetId, date)
-    if (onSaved) onSaved()
-    onClose()
-  }
 
   const buildCurrentInspection = () => ({
     id: existingRecord?.id || generateId(),
@@ -204,7 +232,11 @@ export default function DailyEntryForm({ date, facilityId, facility, initialAsse
     failPhotos,
     tankSumps,
     filterVesselSump,
+    sumpNotes,
+    sumpPhotos,
     dpPressure: dpPressure !== '' ? Number(dpPressure) : null,
+    dpUnavailable,
+    dpNote: dpUnavailable ? dpNote : '',
     signature,
     comment,
   })
@@ -225,7 +257,8 @@ export default function DailyEntryForm({ date, facilityId, facility, initialAsse
   const displayDate = new Date(Number(year), Number(month) - 1, Number(day))
     .toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 
-  const allPass = Object.values(checks).every(Boolean)
+  const allChecked = Object.values(checks).every(v => v !== null)
+  const allPass = allChecked && Object.values(checks).every(v => v === true)
   const selectedAsset = assets.find(a => a.id === selectedAssetId)
 
   return (
@@ -250,6 +283,15 @@ export default function DailyEntryForm({ date, facilityId, facility, initialAsse
               <p className="text-xs text-gray-600 mt-0.5">
                 Saved {formatTimestamp(existingRecord.updatedAt)}
               </p>
+            )}
+            {existingRecord?.editHistory?.length > 0 && (
+              <div className="mt-1 space-y-0.5">
+                {existingRecord.editHistory.map((edit, i) => (
+                  <p key={i} className="text-xs text-amber-500/70">
+                    Edited {formatTimestamp(edit.editedAt)}{edit.editedBy ? ` by ${edit.editedBy}` : ''}
+                  </p>
+                ))}
+              </div>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -341,45 +383,50 @@ export default function DailyEntryForm({ date, facilityId, facility, initialAsse
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-medium text-gray-300">Inspection Items</span>
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                  allPass ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                  !allChecked ? 'bg-gray-500/20 text-gray-400'
+                    : allPass ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
                 }`}>
-                  {Object.values(checks).filter(Boolean).length}/{Object.values(checks).length} Pass
+                  {Object.values(checks).filter(v => v === true).length}/{Object.values(checks).length} Pass
                 </span>
               </div>
               <div className="space-y-2">
                 {Object.entries(DAILY_CHECK_LABELS).map(([key, label]) => {
-                  const pass = checks[key]
+                  const val = checks[key] // null | true | false
                   const hasNoteError = !!errors[key]
                   return (
                     <div key={key}>
                       <div
                         className={`flex items-center gap-3 px-3 py-3 rounded-xl border transition-all ${
-                          pass
+                          val === null
+                            ? 'bg-gray-800/50 border-gray-600'
+                            : val === true
                             ? 'bg-green-500/5 border-green-500/20'
                             : 'border-red-500/40'
                         }`}
-                        style={pass ? {} : { background: 'rgba(239,68,68,0.08)' }}
+                        style={val === false ? { background: 'rgba(239,68,68,0.08)' } : {}}
                       >
                         <span className="flex-1 text-sm text-gray-200">{label}</span>
                         <button
                           type="button"
                           onClick={() => toggleCheck(key)}
                           className={`relative w-14 h-7 rounded-full transition-all flex-shrink-0 ${
-                            pass ? 'bg-green-500' : 'bg-red-600'
+                            val === null ? 'bg-gray-600' : val === true ? 'bg-green-500' : 'bg-red-600'
                           }`}
                         >
                           <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${
-                            pass ? 'right-0.5' : 'left-0.5'
+                            val === null ? 'left-1/2 -translate-x-1/2' : val === true ? 'right-0.5' : 'left-0.5'
                           }`} />
-                          <span className={`absolute inset-0 flex items-center text-xs font-bold text-white ${
-                            pass ? 'justify-start pl-1.5' : 'justify-end pr-1.5'
-                          }`}>
-                            {pass ? 'P' : 'F'}
-                          </span>
+                          {val !== null && (
+                            <span className={`absolute inset-0 flex items-center text-xs font-bold text-white ${
+                              val ? 'justify-start pl-1.5' : 'justify-end pr-1.5'
+                            }`}>
+                              {val ? 'P' : 'F'}
+                            </span>
+                          )}
                         </button>
                       </div>
 
-                      {!pass && (
+                      {val === false && (
                         <div className="mt-1 rounded-xl border border-red-500/30 bg-red-950/30 px-3 py-3 space-y-2">
                           <div>
                             <label className="block text-xs font-medium mb-1">
@@ -443,22 +490,70 @@ export default function DailyEntryForm({ date, facilityId, facility, initialAsse
                   )
                 })}
               </div>
+              {errors.checks && (
+                <p className="text-xs text-red-400 mt-2">{errors.checks}</p>
+              )}
             </div>
 
             {/* Tank Sump(s) */}
-            {tankSumps.map((sump, idx) => (
-              <div key={idx} className="card p-4">
-                <SumpCodePicker
-                  label={tankSumps.length === 1 ? 'Tank Sump' : `Tank Sump ${idx + 1}`}
-                  value={sump}
-                  onChange={(val) => {
-                    const updated = [...tankSumps]
-                    updated[idx] = val
-                    setTankSumps(updated)
-                  }}
-                />
-              </div>
-            ))}
+            {tankSumps.map((sump, idx) => {
+              const sumpKey = `tank_${idx}`
+              return (
+                <div key={idx} className="card p-4">
+                  <SumpCodePicker
+                    label={tankSumps.length === 1 ? 'Tank Sump' : `Tank Sump ${idx + 1}`}
+                    value={sump}
+                    onChange={(val) => {
+                      const updated = [...tankSumps]
+                      updated[idx] = val
+                      setTankSumps(updated)
+                    }}
+                  />
+                  {isNon1A(sump) && (
+                    <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-950/30 px-3 py-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span className="text-xs text-amber-300 font-medium">Non-1A result — explanation and photo required</span>
+                      </div>
+                      <div>
+                        <textarea
+                          value={sumpNotes[sumpKey] || ''}
+                          onChange={e => setSumpNotes(prev => ({ ...prev, [sumpKey]: e.target.value }))}
+                          placeholder="Explain the non-1A reading..."
+                          rows={2}
+                          className={`input-field text-sm resize-none ${errors[`sumpNote_${sumpKey}`] ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                        />
+                        {errors[`sumpNote_${sumpKey}`] && (
+                          <p className="text-xs text-red-400 mt-1">{errors[`sumpNote_${sumpKey}`]}</p>
+                        )}
+                      </div>
+                      <div>
+                        {sumpPhotos[sumpKey] ? (
+                          <div className="space-y-1">
+                            <img src={sumpPhotos[sumpKey]} alt="Sump photo" className="w-full max-h-32 object-cover rounded-lg border border-gray-700" />
+                            <button type="button" onClick={() => setSumpPhotos(prev => { const p = { ...prev }; delete p[sumpKey]; return p })} className="text-xs text-red-400 hover:text-red-300">Remove photo</button>
+                          </div>
+                        ) : (
+                          <label className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-200 cursor-pointer border border-gray-700 hover:border-gray-500 rounded-lg px-3 py-2 transition-colors w-fit">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            Take / Attach Photo
+                            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) compressPhoto(file).then(img => setSumpPhotos(prev => ({ ...prev, [sumpKey]: img }))); e.target.value = '' }} />
+                          </label>
+                        )}
+                        {errors[`sumpPhoto_${sumpKey}`] && (
+                          <p className="text-xs text-red-400 mt-1">{errors[`sumpPhoto_${sumpKey}`]}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
 
             {/* Filter Vessel Sump */}
             <div className="card p-4">
@@ -467,6 +562,48 @@ export default function DailyEntryForm({ date, facilityId, facility, initialAsse
                 value={filterVesselSump}
                 onChange={setFilterVesselSump}
               />
+              {isNon1A(filterVesselSump) && (
+                <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-950/30 px-3 py-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span className="text-xs text-amber-300 font-medium">Non-1A result — explanation and photo required</span>
+                  </div>
+                  <div>
+                    <textarea
+                      value={sumpNotes.filter || ''}
+                      onChange={e => setSumpNotes(prev => ({ ...prev, filter: e.target.value }))}
+                      placeholder="Explain the non-1A reading..."
+                      rows={2}
+                      className={`input-field text-sm resize-none ${errors.sumpNote_filter ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                    />
+                    {errors.sumpNote_filter && (
+                      <p className="text-xs text-red-400 mt-1">{errors.sumpNote_filter}</p>
+                    )}
+                  </div>
+                  <div>
+                    {sumpPhotos.filter ? (
+                      <div className="space-y-1">
+                        <img src={sumpPhotos.filter} alt="Sump photo" className="w-full max-h-32 object-cover rounded-lg border border-gray-700" />
+                        <button type="button" onClick={() => setSumpPhotos(prev => { const p = { ...prev }; delete p.filter; return p })} className="text-xs text-red-400 hover:text-red-300">Remove photo</button>
+                      </div>
+                    ) : (
+                      <label className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-200 cursor-pointer border border-gray-700 hover:border-gray-500 rounded-lg px-3 py-2 transition-colors w-fit">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Take / Attach Photo
+                        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) compressPhoto(file).then(img => setSumpPhotos(prev => ({ ...prev, filter: img }))); e.target.value = '' }} />
+                      </label>
+                    )}
+                    {errors.sumpPhoto_filter && (
+                      <p className="text-xs text-red-400 mt-1">{errors.sumpPhoto_filter}</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* DP Pressure */}
@@ -474,17 +611,74 @@ export default function DailyEntryForm({ date, facilityId, facility, initialAsse
               <label className="block text-sm font-medium text-gray-300 mb-1.5">
                 Differential Pressure (DP)
                 <span className="text-gray-500 font-normal ml-1 text-xs">psi</span>
+                <span className="text-red-400 ml-1">*</span>
               </label>
-              <input
-                type="number"
-                inputMode="decimal"
-                value={dpPressure}
-                onChange={e => setDpPressure(e.target.value)}
-                placeholder="Enter pressure reading"
-                step="0.1"
-                min="0"
-                className="input-field"
-              />
+              {!dpUnavailable && (
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={dpPressure}
+                  onChange={e => {
+                    setDpPressure(e.target.value)
+                    if (errors.dpPressure) setErrors(prev => { const ne = { ...prev }; delete ne.dpPressure; return ne })
+                  }}
+                  placeholder="Enter pressure reading"
+                  step="0.1"
+                  min="0"
+                  className={`input-field ${errors.dpPressure ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                />
+              )}
+              {!dpUnavailable && dpPressure !== '' && Number(dpPressure) > 10 && (
+                <div className="mt-1.5 flex items-center gap-2 bg-amber-900/30 border border-amber-600/40 rounded-lg px-3 py-2">
+                  <svg className="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <span className="text-xs text-amber-300 font-medium">DP over 10 psi — verify reading and investigate</span>
+                </div>
+              )}
+              <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={dpUnavailable}
+                  onChange={e => {
+                    setDpUnavailable(e.target.checked)
+                    if (e.target.checked) {
+                      setDpPressure('')
+                      if (errors.dpPressure) setErrors(prev => { const ne = { ...prev }; delete ne.dpPressure; return ne })
+                    } else {
+                      setDpNote('')
+                    }
+                  }}
+                  className="rounded border-gray-600 text-amber-500 focus:ring-amber-500"
+                />
+                <span className="text-sm text-gray-400">Unable to obtain reading</span>
+              </label>
+              {dpUnavailable && (
+                <div className="mt-2 space-y-1.5">
+                  <div className="flex items-center gap-2 bg-amber-900/30 border border-amber-600/40 rounded-lg px-3 py-2">
+                    <svg className="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span className="text-xs text-amber-300 font-medium">DP reading unavailable — requires follow-up</span>
+                  </div>
+                  <textarea
+                    value={dpNote}
+                    onChange={e => {
+                      setDpNote(e.target.value)
+                      if (errors.dpNote) setErrors(prev => { const ne = { ...prev }; delete ne.dpNote; return ne })
+                    }}
+                    placeholder="Explain why the reading could not be obtained..."
+                    rows={2}
+                    className={`input-field text-sm resize-none ${errors.dpNote ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                  />
+                  {errors.dpNote && (
+                    <p className="text-xs text-red-400">{errors.dpNote}</p>
+                  )}
+                </div>
+              )}
+              {errors.dpPressure && (
+                <p className="text-xs text-red-400 mt-1">{errors.dpPressure}</p>
+              )}
             </div>
 
             {/* Comment */}
@@ -522,31 +716,6 @@ export default function DailyEntryForm({ date, facilityId, facility, initialAsse
               )}
             </div>
 
-            {/* Delete button (existing entries) */}
-            {existingRecord && (
-              <div>
-                {showConfirmDelete ? (
-                  <div className="bg-red-900/30 border border-red-700 rounded-xl p-4 space-y-3">
-                    <p className="text-sm text-red-300">Delete this inspection record? This cannot be undone.</p>
-                    <div className="flex gap-2">
-                      <button onClick={handleDelete} className="btn-danger flex-1 text-sm">
-                        Delete Record
-                      </button>
-                      <button onClick={() => setShowConfirmDelete(false)} className="btn-secondary flex-1 text-sm">
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setShowConfirmDelete(true)}
-                    className="w-full text-center text-sm text-red-400 hover:text-red-300 py-2 border border-red-800 rounded-lg hover:border-red-600 transition-colors"
-                  >
-                    Delete This Record
-                  </button>
-                )}
-              </div>
-            )}
           </div>
         </div>
 

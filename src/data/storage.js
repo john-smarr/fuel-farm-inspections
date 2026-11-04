@@ -112,6 +112,43 @@ export function deleteMonthlyInspection(facilityId, assetId, yearMonth) {
   localStorage.removeItem(KEYS.monthly(facilityId, assetId, yearMonth))
 }
 
+// ─── Generic Form Data ───────────────────────────────────────────────────────
+// Key pattern: ffi_{formId}_{facilityId}_{assetId}_{datePart}
+// datePart is YYYY-MM-DD for daily forms, YYYY-MM for monthly forms
+
+function formKey(formId, facilityId, assetId, datePart) {
+  return `ffi_${formId}_${facilityId}_${assetId}_${datePart}`
+}
+
+export function saveFormData(formId, data) {
+  const key = formKey(formId, data.facilityId, data.assetId, data.datePart)
+  setJSON(key, data)
+}
+
+export function getFormData(formId, facilityId, assetId, datePart) {
+  return getJSON(formKey(formId, facilityId, assetId, datePart), null)
+}
+
+export function deleteFormData(formId, facilityId, assetId, datePart) {
+  localStorage.removeItem(formKey(formId, facilityId, assetId, datePart))
+}
+
+// Returns { datePart: data } for a given form+facility in a month
+export function getFormDataForMonth(formId, facilityId, yearMonth) {
+  const prefix = `ffi_${formId}_${facilityId}_`
+  const result = {}
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key?.startsWith(prefix)) {
+      const data = getJSON(key, null)
+      if (data && data.datePart && data.datePart.startsWith(yearMonth)) {
+        result[data.datePart] = data
+      }
+    }
+  }
+  return result
+}
+
 // ─── App Settings ─────────────────────────────────────────────────────────────
 export function getSettings() {
   return getJSON('ffi_settings', { emailRecipients: [] })

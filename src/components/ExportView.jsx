@@ -93,6 +93,16 @@ export function DailyExportView({ inspection, facility, asset, onClose }) {
                 </div>
               )}
             </div>
+            {inspection.editHistory?.length > 0 && (
+              <div className="mt-2 border-t border-amber-200 pt-2">
+                <span className="text-amber-700 text-xs uppercase font-semibold">Edit History</span>
+                {inspection.editHistory.map((edit, i) => (
+                  <p key={i} className="text-xs text-amber-600">
+                    Modified {formatTimestamp(edit.editedAt)}{edit.editedBy ? ` by ${edit.editedBy}` : ''}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Checklist */}
@@ -107,17 +117,19 @@ export function DailyExportView({ inspection, facility, asset, onClose }) {
               </thead>
               <tbody>
                 {Object.entries(DAILY_CHECK_LABELS).map(([key, label]) => {
-                  const pass = inspection.checks?.[key]
+                  const val = inspection.checks?.[key]
                   return (
                     <tr key={key} className="border-b border-gray-100">
                       <td className="py-2 text-gray-800">{label}</td>
                       <td className="py-2 text-center">
                         <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                          pass
+                          val === true
                             ? 'bg-green-100 text-green-700'
-                            : 'bg-red-100 text-red-700'
+                            : val === false
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-gray-100 text-gray-500'
                         }`}>
-                          {pass ? 'PASS' : 'FAIL'}
+                          {val === true ? 'PASS' : val === false ? 'FAIL' : '—'}
                         </span>
                       </td>
                     </tr>
@@ -156,12 +168,21 @@ export function DailyExportView({ inspection, facility, asset, onClose }) {
                   </div>
                   <div>
                     <span className="text-gray-500 text-xs uppercase font-semibold block mb-1">DP Pressure</span>
-                    <span className="text-xl font-bold font-mono text-gray-900">
-                      {inspection.dpPressure != null && inspection.dpPressure !== '' ? inspection.dpPressure : '—'}
-                      {inspection.dpPressure != null && inspection.dpPressure !== '' && (
-                        <span className="text-sm font-normal ml-1">psi</span>
-                      )}
-                    </span>
+                    {inspection.dpUnavailable ? (
+                      <div>
+                        <span className="text-sm font-bold text-amber-700">UNAVAILABLE</span>
+                        {inspection.dpNote && (
+                          <p className="text-xs text-gray-600 mt-0.5">{inspection.dpNote}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xl font-bold font-mono text-gray-900">
+                        {inspection.dpPressure != null && inspection.dpPressure !== '' ? inspection.dpPressure : '—'}
+                        {inspection.dpPressure != null && inspection.dpPressure !== '' && (
+                          <span className="text-sm font-normal ml-1">psi</span>
+                        )}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

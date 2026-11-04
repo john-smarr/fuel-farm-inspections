@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { MONTHLY_ITEMS, MONTHLY_RATINGS } from '../data/constants'
-import { getMonthlyInspection, saveMonthlyInspection, deleteMonthlyInspection, generateId, getSettings } from '../data/storage'
+import { getMonthlyInspection, saveMonthlyInspection, generateId, getSettings } from '../data/storage'
+import { compressPhoto } from '../utils/photo'
 import { buildMonthlyEmailUrl } from '../utils/email'
 import { MonthlyExportView } from './ExportView'
+import { getFormsForAsset } from '../data/formDefinitions'
+import GenericFormRenderer from './GenericFormRenderer'
+
 
 function getTodayYearMonth() {
   const now = new Date()
@@ -50,6 +54,9 @@ export default function MonthlyInspection({ facilityId, facility }) {
   const [saveStatus, setSaveStatus] = useState(null) // null | 'saved'
   const [errors, setErrors] = useState({})
   const [emailAlertUrl, setEmailAlertUrl] = useState(null)
+  const [itemPhotos, setItemPhotos] = useState({})
+  const [activeFormType, setActiveFormType] = useState('general') // 'general' | formDefinition.id
+  const [showEquipmentForm, setShowEquipmentForm] = useState(null) // formDefinition or null
 
   const loadData = (assetId, ym) => {
     if (!facilityId || !assetId) return
@@ -62,10 +69,12 @@ export default function MonthlyInspection({ facilityId, facility }) {
         }
       })
       setItems(merged)
+      setItemPhotos(existing.itemPhotos || {})
       setExistingRecord(existing)
       setSaved(true)
     } else {
       setItems(buildDefaultItems())
+      setItemPhotos({})
       setExistingRecord(null)
       setSaved(false)
     }
@@ -80,6 +89,9 @@ export default function MonthlyInspection({ facilityId, facility }) {
     setErrors({})
     setEmailAlertUrl(null)
     setSaveStatus(null)
+    setItemPhotos({})
+    setActiveFormType('general')
+    setShowEquipmentForm(null)
   }
 
   const prevMonth = () => {
@@ -118,6 +130,11 @@ export default function MonthlyInspection({ facilityId, facility }) {
         newErrors[key] = 'Notes are required for items rated C'
       }
     })
+    // Membrane filter test always requires a photo
+    if (items.membraneFilterTest?.rating && !itemPhotos.membraneFilterTest) {
+      newErrors.membraneFilterTestPhoto = 'Photo is required for Membrane Filter Test'
+    }
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
       return
@@ -125,6 +142,13 @@ export default function MonthlyInspection({ facilityId, facility }) {
     setErrors({})
 
     const now = new Date().toISOString()
+
+    // Track edits to existing records
+    let editHistory = existingRecord?.editHistory || []
+    if (existingRecord) {
+      editHistory = [...editHistory, { editedAt: now }]
+    }
+
     const inspection = {
       id: existingRecord?.id || generateId(),
       facilityId,
@@ -132,7 +156,9 @@ export default function MonthlyInspection({ facilityId, facility }) {
       yearMonth,
       createdAt: existingRecord?.createdAt || now,
       updatedAt: now,
+      editHistory,
       items,
+      itemPhotos,
     }
     saveMonthlyInspection(inspection)
     setExistingRecord(inspection)
@@ -158,6 +184,7 @@ export default function MonthlyInspection({ facilityId, facility }) {
     createdAt: existingRecord?.createdAt,
     updatedAt: existingRecord?.updatedAt,
     items,
+    itemPhotos,
   })
 
   if (!facilityId) {
@@ -224,8 +251,73 @@ export default function MonthlyInspection({ facilityId, facility }) {
                 Saved {formatTimestamp(existingRecord.updatedAt)}
               </p>
             )}
+            {existingRecord?.editHistory?.length > 0 && (
+              <div className="mt-1 space-y-0.5">
+                {existingRecord.editHistory.map((edit, i) => (
+                  <p key={i} className="text-xs text-amber-500/70">
+                    Edited {formatTimestamp(edit.editedAt)}{edit.editedBy ? ` by ${edit.editedBy}` : ''}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
         )}
+
+        {/* Form type selector */}
+        {selectedAssetId && (() => {
+          const selectedAsset = assets.find(a => a.id === selectedAssetId)
+          const equipmentForms = selectedAsset ? getFormsForAsset(selectedAsset).filter(f => f.frequency === 'monthly') : []
+          if (equipmentForms.length === 0) return null
+          return (
+            <div className="mb-4">
+              <p className="text-xs text-gray-500 mb-2">Form Type</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setActiveFormType('general'); setShowEquipmentForm(null) }}
+                  className={`px-3 py-2 rounded-xl border text-sm font-medium transition-all ${
+                    activeFormType === 'general'
+                      ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                      : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-400'
+                  }`}
+                >
+                  General
+                </button>
+                {equipmentForms.map(form => (
+                  <button
+                    key={form.id}
+                    type="button"
+                    onClick={() => { setActiveFormType(form.id); setShowEquipmentForm(form) }}
+                    className={`px-3 py-2 rounded-xl border text-sm font-medium transition-all ${
+                      activeFormType === form.id
+                        ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                        : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-400'
+                    }`}
+                  >
+                    {form.shortLabel}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Equipment-specific form */}
+        {showEquipmentForm && selectedAssetId && (
+          <GenericFormRenderer
+            formDefinition={showEquipmentForm}
+            facilityId={facilityId}
+            facility={facility}
+            asset={assets.find(a => a.id === selectedAssetId)}
+            datePart={yearMonth}
+            onClose={() => { setShowEquipmentForm(null); setActiveFormType('general') }}
+            onSaved={() => {}}
+          />
+        )}
+
+        {/* Month selector — only show for general form */}
+        {activeFormType === 'general' && (
+        <React.Fragment>
 
         {/* Month selector */}
         <div className="flex items-center justify-between mb-4">
@@ -318,6 +410,40 @@ export default function MonthlyInspection({ facilityId, facility }) {
                     })}
                   </div>
                 </div>
+
+                {/* Membrane filter test photo (always required) */}
+                {key === 'membraneFilterTest' && (
+                  <div>
+                    <label className={`block text-xs mb-1 ${errors.membraneFilterTestPhoto ? 'text-red-400' : 'text-gray-500'}`}>
+                      Photo <span className="text-red-400">*</span>
+                    </label>
+                    {itemPhotos.membraneFilterTest ? (
+                      <div className="space-y-1">
+                        <img src={itemPhotos.membraneFilterTest} alt="Membrane filter" className="w-full max-h-32 object-cover rounded-lg border border-gray-700" />
+                        <button type="button" onClick={() => setItemPhotos(prev => { const p = { ...prev }; delete p.membraneFilterTest; return p })} className="text-xs text-red-400 hover:text-red-300">Remove photo</button>
+                      </div>
+                    ) : (
+                      <label className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-200 cursor-pointer border border-gray-700 hover:border-gray-500 rounded-lg px-3 py-2 transition-colors w-fit">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Take / Attach Photo
+                        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => {
+                          const file = e.target.files?.[0]
+                          if (file) compressPhoto(file).then(img => {
+                            setItemPhotos(prev => ({ ...prev, membraneFilterTest: img }))
+                            if (errors.membraneFilterTestPhoto) setErrors(prev => { const ne = { ...prev }; delete ne.membraneFilterTestPhoto; return ne })
+                          })
+                          e.target.value = ''
+                        }} />
+                      </label>
+                    )}
+                    {errors.membraneFilterTestPhoto && (
+                      <p className="text-xs text-red-400 mt-1">{errors.membraneFilterTestPhoto}</p>
+                    )}
+                  </div>
+                )}
 
                 {/* Numeric value (if applicable) */}
                 {itemDef.hasNumeric && (
@@ -440,6 +566,9 @@ export default function MonthlyInspection({ facilityId, facility }) {
             </button>
           </div>
         </div>
+
+        </React.Fragment>
+        )}
       </div>
     </div>
   )

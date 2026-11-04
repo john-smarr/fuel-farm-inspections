@@ -60,7 +60,7 @@ function buildDailyInspections() {
 
     // Most days all pass; a few days have failures
     const hasFailure = [3, 7, 12, 18, 22, 27].includes(daysAgo)
-    const failKey = ['fuelLeaks', 'fireExtinguishers', 'bondingCablesClamps', 'wasteFuelTanks', 'fuelLeaks', 'fireExtinguishers'][
+    const failKey = ['fuelLeaks', 'fireExtinguishers', 'bondingCablesClamps', 'reclaimTankSystem', 'fuelLeaks', 'fireExtinguishers'][
       [3, 7, 12, 18, 22, 27].indexOf(daysAgo)
     ]
 
@@ -70,7 +70,7 @@ function buildDailyInspections() {
       fuelLeaks: true,
       bondingCablesClamps: true,
       fireExtinguishers: true,
-      wasteFuelTanks: true,
+      reclaimTankSystem: true,
       hosesSwivelsNozzles: true,
     }
 
@@ -81,7 +81,7 @@ function buildDailyInspections() {
         fuelLeaks: 'Minor seep at south tank coupling. Tagged for maintenance.',
         fireExtinguishers: 'Extinguisher #3 inspection tag expired. Replacement ordered.',
         bondingCablesClamps: 'Clamp B-7 showing corrosion. Scheduled for replacement.',
-        wasteFuelTanks: 'Waste tank at 90% capacity. Arranged pickup for next day.',
+        reclaimTankSystem: 'Reclaim tank at 90% capacity. Arranged pickup for next day.',
       }
       failNotes[failKey] = notesByKey[failKey]
     }

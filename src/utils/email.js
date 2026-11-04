@@ -6,7 +6,7 @@ export function buildDailyEmailUrl({ facility, inspection }) {
   const to = settings.emailRecipients.join(',')
 
   const failedItems = Object.entries(inspection.checks || {})
-    .filter(([, pass]) => !pass)
+    .filter(([, val]) => val === false)
     .map(([key]) => {
       const label = DAILY_CHECK_LABELS[key] || key
       const note = inspection.failNotes?.[key] || '(no note)'

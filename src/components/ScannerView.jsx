@@ -1,23 +1,39 @@
 import React, { useEffect, useRef, useState } from 'react'
 import QrScanner from 'qr-scanner'
-import { getFacilities } from '../data/storage'
+import { getFacilities, saveFacility, generateId } from '../data/storage'
+import { compressPhoto } from '../utils/photo'
 import DailyEntryForm from './DailyEntryForm'
+import FormPicker from './FormPicker'
+import GenericFormRenderer from './GenericFormRenderer'
 
 function getTodayStr() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+function getCurrentYearMonth() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 // Parse QR data and find matching asset across all facilities
 function resolveAsset(data) {
-  if (!data?.startsWith('ffi:asset:')) return null
-  const assetId = data.slice('ffi:asset:'.length)
+  if (!data) return null
   for (const fac of getFacilities()) {
-    const asset = (fac.assets || []).find(a => a.id === assetId)
+    // Match by ffi:asset:{id} format
+    if (data.startsWith('ffi:asset:')) {
+      const assetId = data.slice('ffi:asset:'.length)
+      const asset = (fac.assets || []).find(a => a.id === assetId)
+      if (asset) return { facility: fac, asset }
+    }
+    // Match by linked qrCode value (external QR/barcode)
+    const asset = (fac.assets || []).find(a => a.qrCode === data)
     if (asset) return { facility: fac, asset }
   }
   return null
 }
+
+const FUEL_TYPES = ['Jet A', 'Jet A-1', '100LL AvGas', 'Other']
 
 // Fallback when camera is unavailable — manual asset list
 function ManualPicker({ facility, onSelect }) {
@@ -120,6 +136,173 @@ function ManualPicker({ facility, onSelect }) {
   )
 }
 
+function RegisterAssetSheet({ qrValue, facility, onRegistered, onClose }) {
+  const [assetType, setAssetType] = useState('tank')
+  const [name, setName] = useState('')
+  const [fuelType, setFuelType] = useState('Jet A')
+  const [sumpCount, setSumpCount] = useState(1)
+  const [photo, setPhoto] = useState(null)
+  const [error, setError] = useState('')
+
+  const handleRegister = () => {
+    if (!name.trim()) { setError('Name is required'); return }
+    if (!facility) { setError('No facility selected'); return }
+
+    const newAsset = {
+      id: generateId(),
+      type: assetType,
+      name: name.trim(),
+      fuelType,
+      qrCode: qrValue,
+      ...(assetType === 'tank' ? { sumpCount: Number(sumpCount) || 1 } : {}),
+      photo,
+      notes: '',
+    }
+
+    const updatedFacility = {
+      ...facility,
+      assets: [...(facility.assets || []), newAsset],
+    }
+    saveFacility(updatedFacility)
+    onRegistered({ facility: updatedFacility, asset: newAsset })
+  }
+
+  return (
+    <>
+      <div className="sheet-overlay animate-fade-in" onClick={onClose} />
+      <div className="bottom-sheet animate-slide-up">
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full bg-gray-600" />
+        </div>
+
+        <div className="px-4 py-3 border-b border-gray-800">
+          <h2 className="font-bold text-white text-lg">New Asset Detected</h2>
+          <p className="text-sm text-gray-400 mt-0.5">This QR code isn't linked to any asset yet.</p>
+          <p className="text-xs text-gray-600 font-mono mt-1 break-all">{qrValue}</p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-4 py-4 space-y-4">
+            {/* Asset type */}
+            <div>
+              <label className="block text-sm text-gray-300 mb-1.5">Asset Type</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAssetType('tank')}
+                  className={`flex-1 py-2.5 rounded-xl border text-sm font-bold transition-all ${
+                    assetType === 'tank'
+                      ? 'bg-blue-500/20 border-blue-500 text-blue-400'
+                      : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-400'
+                  }`}
+                >
+                  Tank
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssetType('truck')}
+                  className={`flex-1 py-2.5 rounded-xl border text-sm font-bold transition-all ${
+                    assetType === 'truck'
+                      ? 'bg-orange-500/20 border-orange-500 text-orange-400'
+                      : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-400'
+                  }`}
+                >
+                  Truck / Refueler
+                </button>
+              </div>
+            </div>
+
+            {/* Name */}
+            <div>
+              <label className="block text-sm text-gray-300 mb-1.5">
+                Name <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={e => { setName(e.target.value); setError('') }}
+                placeholder={assetType === 'tank' ? 'e.g. Tank 1' : 'e.g. Refueler Truck 1'}
+                className="input-field"
+                autoFocus
+              />
+            </div>
+
+            {/* Fuel type */}
+            <div>
+              <label className="block text-sm text-gray-300 mb-1.5">Fuel Type</label>
+              <div className="flex flex-wrap gap-1.5">
+                {FUEL_TYPES.map(ft => (
+                  <button
+                    key={ft}
+                    type="button"
+                    onClick={() => setFuelType(ft)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                      fuelType === ft
+                        ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                        : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-400'
+                    }`}
+                  >
+                    {ft}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Sump count (tanks only) */}
+            {assetType === 'tank' && (
+              <div>
+                <label className="block text-sm text-gray-300 mb-1.5">Sump Points</label>
+                <select value={sumpCount} onChange={e => setSumpCount(e.target.value)} className="input-field">
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Photo */}
+            <div>
+              <label className="block text-sm text-gray-300 mb-1.5">Photo</label>
+              {photo ? (
+                <div className="space-y-1">
+                  <img src={photo} alt="Asset" className="w-full max-h-32 object-cover rounded-lg border border-gray-700" />
+                  <button type="button" onClick={() => setPhoto(null)} className="text-xs text-red-400 hover:text-red-300">Remove</button>
+                </div>
+              ) : (
+                <label className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-200 cursor-pointer border border-gray-700 hover:border-gray-500 rounded-lg px-3 py-2 transition-colors w-fit">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Take / Attach Photo
+                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => {
+                    const file = e.target.files?.[0]
+                    if (file) compressPhoto(file).then(img => setPhoto(img))
+                    e.target.value = ''
+                  }} />
+                </label>
+              )}
+            </div>
+
+            {error && <p className="text-sm text-red-400">{error}</p>}
+
+            <p className="text-xs text-gray-600">
+              This will add the asset to <strong className="text-gray-400">{facility?.name}</strong> and link it to the scanned QR code.
+            </p>
+          </div>
+        </div>
+
+        <div className="px-4 py-4 border-t border-gray-800 bg-gray-900 safe-bottom">
+          <div className="flex gap-3">
+            <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+            <button onClick={handleRegister} className="btn-primary flex-1">Register Asset</button>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
 export default function ScannerView({ facility, facilityId }) {
   const videoRef = useRef(null)
   const scannerRef = useRef(null)
@@ -128,6 +311,8 @@ export default function ScannerView({ facility, facilityId }) {
   const [noCamera, setNoCamera] = useState(false)
   const [badScan, setBadScan] = useState(false)
   const [found, setFound] = useState(null) // { facility, asset }
+  const [selectedForm, setSelectedForm] = useState(null) // null = show picker, 'legacyDaily' | 'legacyMonthly' | formDefinition
+  const [unknownQR, setUnknownQR] = useState(null) // scanned QR value not matching any asset
 
   useEffect(() => {
     if (!scanning || noCamera || !permissionRequested) return
@@ -143,6 +328,11 @@ export default function ScannerView({ facility, facilityId }) {
           if (navigator.vibrate) navigator.vibrate(50)
           scanner.stop()
           setFound(resolved)
+          setScanning(false)
+        } else if (result.data) {
+          if (navigator.vibrate) navigator.vibrate(50)
+          scanner.stop()
+          setUnknownQR(result.data)
           setScanning(false)
         } else {
           setBadScan(true)
@@ -163,14 +353,21 @@ export default function ScannerView({ facility, facilityId }) {
       scanner.destroy()
       scannerRef.current = null
     }
-  }, [scanning, noCamera])
+  }, [scanning, noCamera, permissionRequested])
 
   const handleFormClose = () => {
     setFound(null)
+    setSelectedForm(null)
+    setUnknownQR(null)
     setScanning(true)
   }
 
   const handleManualSelect = (resolved) => {
+    setFound(resolved)
+  }
+
+  const handleAssetRegistered = (resolved) => {
+    setUnknownQR(null)
     setFound(resolved)
   }
 
@@ -184,15 +381,27 @@ export default function ScannerView({ facility, facilityId }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
         </div>
-        <h2 className="text-lg font-bold text-white mb-2">Camera Access</h2>
+        <h2 className="text-lg font-bold text-white mb-2">Scan QR Code</h2>
         <p className="text-sm text-gray-400 mb-8 max-w-xs">
-          Fuel Farm Inspector uses your camera to scan QR codes on tank and truck labels to open the daily inspection form.
+          Scan the QR code on a tank or truck label to start an inspection. Camera access is needed to scan codes.
         </p>
         <button
-          onClick={() => setPermissionRequested(true)}
+          onClick={async () => {
+            // Pre-request camera permission to ensure the system dialog appears
+            try {
+              const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+              // Permission granted — stop the stream, let QrScanner take over
+              stream.getTracks().forEach(t => t.stop())
+              setPermissionRequested(true)
+            } catch {
+              // Permission denied or no camera available
+              setPermissionRequested(true)
+              setNoCamera(true)
+            }
+          }}
           className="btn-primary w-full max-w-xs py-3 text-base font-semibold mb-3"
         >
-          Enable Camera
+          Continue
         </button>
         <button
           onClick={() => { setPermissionRequested(true); setNoCamera(true) }}
@@ -213,7 +422,17 @@ export default function ScannerView({ facility, facilityId }) {
           <p className="text-xs text-gray-500 mt-0.5">{facility?.name || 'No facility selected'}</p>
         </div>
         <ManualPicker facility={facility} onSelect={handleManualSelect} />
-        {found && (
+        {found && !selectedForm && (
+          <FormPicker
+            facility={found.facility}
+            asset={found.asset}
+            onSelectLegacyDaily={() => setSelectedForm('legacyDaily')}
+            onSelectLegacyMonthly={() => setSelectedForm('legacyMonthly')}
+            onSelectGenericForm={(form) => setSelectedForm(form)}
+            onClose={handleFormClose}
+          />
+        )}
+        {found && selectedForm === 'legacyDaily' && (
           <DailyEntryForm
             date={getTodayStr()}
             facilityId={found.facility.id}
@@ -221,6 +440,25 @@ export default function ScannerView({ facility, facilityId }) {
             initialAssetId={found.asset.id}
             onClose={handleFormClose}
             onSaved={handleFormClose}
+          />
+        )}
+        {found && selectedForm && selectedForm !== 'legacyDaily' && selectedForm !== 'legacyMonthly' && (
+          <GenericFormRenderer
+            formDefinition={selectedForm}
+            facilityId={found.facility.id}
+            facility={found.facility}
+            asset={found.asset}
+            datePart={selectedForm.frequency === 'monthly' ? getCurrentYearMonth() : getTodayStr()}
+            onClose={handleFormClose}
+            onSaved={handleFormClose}
+          />
+        )}
+        {unknownQR && (
+          <RegisterAssetSheet
+            qrValue={unknownQR}
+            facility={facility}
+            onRegistered={handleAssetRegistered}
+            onClose={handleFormClose}
           />
         )}
       </>
@@ -271,8 +509,18 @@ export default function ScannerView({ facility, facilityId }) {
         </div>
       </div>
 
-      {/* Daily entry form — appears after successful scan */}
-      {found && (
+      {/* Form picker — appears after successful scan */}
+      {found && !selectedForm && (
+        <FormPicker
+          facility={found.facility}
+          asset={found.asset}
+          onSelectLegacyDaily={() => setSelectedForm('legacyDaily')}
+          onSelectLegacyMonthly={() => setSelectedForm('legacyMonthly')}
+          onSelectGenericForm={(form) => setSelectedForm(form)}
+          onClose={handleFormClose}
+        />
+      )}
+      {found && selectedForm === 'legacyDaily' && (
         <DailyEntryForm
           date={getTodayStr()}
           facilityId={found.facility.id}
@@ -280,6 +528,25 @@ export default function ScannerView({ facility, facilityId }) {
           initialAssetId={found.asset.id}
           onClose={handleFormClose}
           onSaved={handleFormClose}
+        />
+      )}
+      {found && selectedForm && selectedForm !== 'legacyDaily' && selectedForm !== 'legacyMonthly' && (
+        <GenericFormRenderer
+          formDefinition={selectedForm}
+          facilityId={found.facility.id}
+          facility={found.facility}
+          asset={found.asset}
+          datePart={selectedForm.frequency === 'monthly' ? getCurrentYearMonth() : getTodayStr()}
+          onClose={handleFormClose}
+          onSaved={handleFormClose}
+        />
+      )}
+      {unknownQR && (
+        <RegisterAssetSheet
+          qrValue={unknownQR}
+          facility={facility}
+          onRegistered={handleAssetRegistered}
+          onClose={handleFormClose}
         />
       )}
     </div>

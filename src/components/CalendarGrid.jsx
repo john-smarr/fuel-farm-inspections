@@ -21,10 +21,15 @@ function getTodayString() {
 function getInspectionStatus(inspectionList) {
   if (!inspectionList || inspectionList.length === 0) return 'none'
   const anyFail = inspectionList.some(insp =>
-    Object.values(insp.checks || {}).some(v => !v)
+    Object.values(insp.checks || {}).some(v => v === false)
   )
   if (anyFail) return 'fail'
   return 'pass'
+}
+
+function hasBeenEdited(inspectionList) {
+  if (!inspectionList) return false
+  return inspectionList.some(insp => insp.editHistory?.length > 0)
 }
 
 export default function CalendarGrid({ facilityId, facility }) {
@@ -190,6 +195,7 @@ export default function CalendarGrid({ facilityId, facility }) {
               const dateStr = toDateString(viewYear, viewMonth, day)
               const inspection = inspections[dateStr]
               const status = getInspectionStatus(inspection)
+              const edited = hasBeenEdited(inspection)
               const isToday = dateStr === todayStr
               const isFuture = dateStr > todayStr
 
@@ -224,6 +230,13 @@ export default function CalendarGrid({ facilityId, facility }) {
                   {status === 'none' && !isFuture && (
                     <span className="w-1 h-1 rounded-full mt-0.5 bg-transparent" />
                   )}
+                  {edited && (
+                    <span className="absolute top-0.5 right-0.5 text-amber-400" title="Edited">
+                      <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                      </svg>
+                    </span>
+                  )}
                 </button>
               )
             })}
@@ -242,6 +255,12 @@ export default function CalendarGrid({ facilityId, facility }) {
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-transparent border border-gray-600" />
               No Entry
+            </span>
+            <span className="flex items-center gap-1.5">
+              <svg className="w-2.5 h-2.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+              </svg>
+              Edited
             </span>
           </div>
 

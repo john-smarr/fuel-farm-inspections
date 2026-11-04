@@ -22,7 +22,7 @@ export const DAILY_CHECK_LABELS = {
   fuelLeaks: 'Fuel Leaks',
   bondingCablesClamps: 'Bonding Cables / Clamps / Reels',
   fireExtinguishers: 'Fire Extinguishers',
-  wasteFuelTanks: 'Waste Fuel Tanks',
+  reclaimTankSystem: 'Reclaim Tank System',
   hosesSwivelsNozzles: 'Hoses / Swivels / Nozzles',
 }
 
